@@ -76,11 +76,12 @@ footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
 
 <section id="tab-an" class="on">
 <div class="bar">
-<button class="btn" id="btnScan">Perbarui</button>
-<label class="mut"><input type="checkbox" id="auto"> Otomatis</label>
+<button class="btn" id="btnScan">Perbarui</button><button class="btn alt" id="btnSrv">Pindai server</button>
+<label class="mut"><input type="checkbox" id="auto"> Muat ulang tiap menit</label>
 <span class="mut" id="last"></span>
 </div>
-<div class="warn">Forex dan emas biasanya diperdagangkan dengan leverage, sehingga rugi bisa lebih besar dari modal setoran. Sistem ini alat bantu analisa, bukan jaminan untung. Tab harus tetap terbuka agar pembaruan otomatis jalan.</div>
+<div class="warn">Forex dan emas biasanya diperdagangkan dengan leverage, sehingga rugi bisa lebih besar dari modal setoran. Sistem ini alat bantu analisa, bukan jaminan untung. Pemindaian dan alarm Telegram berjalan di server tiap 15 menit; halaman ini hanya menampilkan hasilnya.</div>
+<div id="errBar"></div>
 <div id="cfgBar"></div>
 <div id="cards"></div>
 </section>
@@ -99,7 +100,7 @@ footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
 <section id="tab-jr">
 <div id="jrKpi" class="kpi"></div>
 <canvas id="jrCv"></canvas>
-<label class="mut" style="display:block;margin:12px 0"><input type="checkbox" id="autoPaper"> Buka posisi paper otomatis saat ada sinyal</label>
+<label class="mut" style="display:block;margin:12px 0"><input type="checkbox" id="autoPaper"> Buka posisi paper otomatis saat ada sinyal (dijalankan server)</label>
 <h3>Posisi terbuka</h3>
 <div class="tw"><table id="jrOpen"></table></div>
 <h3>Riwayat</h3>
@@ -108,9 +109,9 @@ footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
 </section>
 
 <section id="tab-st">
-<div class="note"><b>Kunci API gratis:</b> daftar di twelvedata.com, lalu salin API key dari dashboard dan tempel di bawah. Paket gratis: 8 permintaan per menit dan 800 per hari. Kunci hanya tersimpan di browser perangkat ini.</div>
+<div class="note"><b>Mode server:</b> kunci Twelve Data, token Telegram, dan kode akses disimpan di Script Properties Apps Script, bukan di browser. Di sini cukup isi kode akses yang sama dengan ACCESS_CODE di server.</div>
 <div id="form"></div>
-<div class="bar" style="margin-top:14px"><button class="btn" id="stSave">Simpan</button><button class="btn alt" id="stKey">Tes kunci API</button><button class="btn alt" id="stTg">Tes Telegram</button></div>
+<div class="bar" style="margin-top:14px"><button class="btn" id="stSave">Simpan</button><button class="btn alt" id="stKey">Tes data server</button><button class="btn alt" id="stTg">Tes Telegram</button></div>
 <div class="mut" id="stMsg"></div>
 <div class="note">Spread dalam pip dan ukuran pip bawaan hanyalah perkiraan. Isi spread sesuai akun Finex Anda (lihat di MetaTrader 5, kolom spread), misalnya <code>EUR/USD=1.0, XAU/USD=2.5</code>. Untuk emas, 1 pip dihitung 0,10 dolar. Biaya swap (bunga menginap) tidak dihitung.</div>
 </section>
@@ -259,12 +260,13 @@ function lotFor(sym,price,slPips,riskUSD){
 }
 // ==/CORE==
 
+const API_URL='https://script.google.com/macros/s/AKfycbwpcTcOroRq8A3oywj1V99YIhX0YWKR-D5LlYwW_8N462U0DEDPaz8PhASn1dKVowmLXg/exec';
 const $=s=>document.querySelector(s);
-const LSK='forexradar.v1',LSJ='forexradar.journal.v1',LSB='forexradar.bt.v1',LSU='forexradar.usage.v1';
-const DEF={tf:'1h',mode:'pullback',sides:'both',key:'',pairs:'EUR/USD,GBP/USD,USD/JPY,AUD/USD,USD/CAD,USD/CHF,XAU/USD',spreads:'',slip:0.3,tpAtr:2,slAtr:1,minScore:60,minRR:1,maxBars:24,cooldown:30,refresh:20,balance:100,risk:1,tgToken:'',tgChat:'',autoPaper:false};
+const LSK='forexradar.cfg.v2',LSC='forexradar.code.v2',LSB='forexradar.bt.v1';
+const DEF={tf:'1h',mode:'pullback',sides:'both',pairs:'EUR/USD,GBP/USD,USD/JPY,AUD/USD,USD/CAD,USD/CHF,XAU/USD',spreads:'',slip:0.3,tpAtr:2,slAtr:1,minScore:60,minRR:1,maxBars:24,cooldown:30,balance:100,risk:1,autoPaper:false};
 const MODES={pullback:'Pantulan EMA21',momentum:'Momentum',donchian:'Breakout 55 candle'};
 const FIELDS=[
-['key','Kunci API Twelve Data','txt'],
+['code','Kode akses (disimpan di perangkat ini)','pw'],
 ['pairs','Daftar pasangan (pisah koma)','txt'],
 ['tf','Timeframe','sel',[['15min','15 menit'],['1h','1 jam'],['4h','4 jam']]],
 ['mode','Mode sinyal','sel',[['pullback','Pantulan EMA21 (searah tren)'],['momentum','Momentum'],['donchian','Breakout 55 candle + EMA200']]],
@@ -277,17 +279,17 @@ const FIELDS=[
 ['minRR','R:R bersih minimum','num'],
 ['maxBars','Batas waktu posisi (jumlah candle)','num'],
 ['cooldown','Jeda alarm per pasangan (menit)','num'],
-['refresh','Interval pembaruan data (menit)','num'],
 ['balance','Modal akun (USD)','num'],
-['risk','Risiko per transaksi (% modal)','num'],
-['tgToken','Telegram Bot Token (opsional)','txt'],
-['tgChat','Telegram Chat ID (opsional)','txt']
+['risk','Risiko per transaksi (% modal)','num']
 ];
 function load(k,d){try{const x=JSON.parse(localStorage.getItem(k));return x?x:d}catch(e){return d}}
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function getCode(){try{return localStorage.getItem(LSC)||''}catch(e){return ''}}
 let cfg=Object.assign({},DEF,load(LSK,{}));
-let jr=load(LSJ,{open:[],closed:[]});
-const S={data:{},an:{},lastAlert:{},timer:null,busy:false,wake:null,gap:7700,hist:{},last:0};
+let jr={open:[],closed:[],pnl:0};
+const S={data:{},an:{},timer:null,busy:false,gap:7700,hist:{},last:0,scanAt:0,credits:null,tg:false,hasKey:false,err:''};
+function esc(x){return String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function equity(){return cfg.balance+(jr.pnl||0)}
 
 function pairs(){
   const o=[];
@@ -304,89 +306,8 @@ function cl(x){return x>=0?'pos':'neg'}
 function jt(ms){return new Date(ms).toLocaleString('id-ID',{timeZone:'Asia/Jakarta',hour12:false,day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 
-// ---------- API ----------
-function usage(){const t=new Date().toISOString().slice(0,10),u=load(LSU,{day:t,n:0});return u.day===t?u:{day:t,n:0}}
-function bumpUsage(){const u=usage();u.n++;save(LSU,u);renderStat()}
-function credits(){return 800-usage().n}
-let lastCall=0;
-async function throttle(){const w=lastCall+S.gap-Date.now();if(w>0)await wait(w);lastCall=Date.now()}
-function parseT(dt){return Date.parse(dt.length>10?dt.replace(' ','T')+'Z':dt+'T00:00:00Z')}
-async function td(sym,interval,size,tries){
-  tries=tries||0;
-  if(!cfg.key)throw new Error('Kunci API belum diisi di Setelan');
-  await throttle();bumpUsage();
-  let j;
-  try{
-    const r=await fetch(`https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(sym)}&interval=${interval}&outputsize=${size}&order=asc&timezone=UTC&apikey=${encodeURIComponent(cfg.key)}`);
-    j=await r.json();
-  }catch(e){throw new Error('Jaringan atau CORS gagal ('+e.message+')')}
-  if(j&&j.status==='error'){
-    if(j.code===429&&tries<1){await wait(61000);return td(sym,interval,size,tries+1)}
-    throw new Error(j.message||'Kesalahan API');
-  }
-  if(!j||!Array.isArray(j.values)||!j.values.length)throw new Error('Data kosong');
-  const m=j.values.map(v=>({t:parseT(v.datetime),o:+v.open,h:+v.high,l:+v.low,c:+v.close})).filter(x=>isFinite(x.t)&&isFinite(x.c)&&isFinite(x.h)&&isFinite(x.l)&&isFinite(x.o));
-  m.sort((a,b)=>a.t-b.t);
-  if(m.length<80)throw new Error('Data terlalu sedikit');
-  return m;
-}
-async function paxg(tf,lim){
-  const iv={'15min':'15m','1h':'1h','4h':'4h'}[tf];
-  const r=await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=PAXGUSDT&interval=${iv}&limit=${Math.min(1000,lim)}`);
-  if(!r.ok)throw new Error('HTTP '+r.status);
-  const a=await r.json();
-  return a.map(k=>({t:k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4]}));
-}
-async function fetchCandles(sym,tf,size){
-  try{return{cs:await td(sym,tf,size),src:'Twelve Data'}}
-  catch(e){
-    if(sym==='XAU/USD'){try{return{cs:await paxg(tf,size),src:'PAXG Binance (proksi emas)'}}catch(e2){}}
-    throw e;
-  }
-}
 
-// ---------- Alert ----------
-function beep(){try{const A=new(window.AudioContext||window.webkitAudioContext)(),o=A.createOscillator(),g=A.createGain();o.connect(g);g.connect(A.destination);o.frequency.value=880;g.gain.value=.15;o.start();setTimeout(()=>{o.stop();A.close()},250)}catch(e){}}
-async function tg(text){if(!cfg.tgToken||!cfg.tgChat)return false;try{const r=await fetch(`https://api.telegram.org/bot${encodeURIComponent(cfg.tgToken)}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:cfg.tgChat,text})});const j=await r.json();return!!j.ok}catch(e){return false}}
-function alertSignal(sym,s,lot){
-  const dir=s.side===1?'BELI':'JUAL';
-  const txt=`SINYAL ${dir} ${sym} (${cfg.tf})\nSkor ${s.score}/100 · ${MODES[cfg.mode]}\nMasuk ~${fp(sym,s.entry)}\nTP ${fp(sym,s.tp)} (${s.tpPips.toFixed(0)} pip)\nSL ${fp(sym,s.sl)} (${s.slPips.toFixed(0)} pip)\nR:R bersih ${s.rr.toFixed(2)}\nLot ±${lot.lot.toFixed(2)} (risiko ${cfg.risk}% dari ${cfg.balance} USD)\n${s.why.join(', ')}`;
-  beep();try{navigator.vibrate&&navigator.vibrate(200)}catch(e){}
-  try{if('Notification'in window&&Notification.permission==='granted')new Notification('Forex Radar: '+sym,{body:`${dir} | TP ${fp(sym,s.tp)} | SL ${fp(sym,s.sl)}`})}catch(e){}
-  tg(txt);
-}
 
-// ---------- Paper ----------
-function equity(){return cfg.balance+jr.closed.reduce((a,t)=>a+t.pnl,0)}
-function openPaper(sym,s,candleT,src){
-  if(jr.open.some(p=>p.sym===sym))return;
-  jr.open.push({id:Date.now()+sym,sym,src,side:s.side,entry:s.entry,tp:s.tp,sl:s.sl,slPct:s.slPct,riskUSD:equity()*cfg.risk/100,openAt:Date.now(),entryCandleT:candleT,score:s.score});
-  save(LSJ,jr);
-}
-function closePaper(p,exit,reason){
-  const meta=pairMeta(p.sym,cfg),cost=costPct(meta,cfg,p.entry);
-  const net=p.side*(exit-p.entry)/p.entry*100-cost,R=net/(p.slPct+cost);
-  jr.closed.unshift(Object.assign({},p,{exit,reason,net,R,pnl:p.riskUSD*R,closeAt:Date.now()}));
-  jr.open=jr.open.filter(x=>x.id!==p.id);
-}
-function updatePaper(){
-  const ms=(TFMIN[cfg.tf]||60)*60000;let ch=false;
-  for(const p of jr.open.slice()){
-    const d=S.data[p.sym];if(!d||!d.candles||d.src!==p.src)continue;
-    const cs=d.candles,last=cs[cs.length-1],sd=p.side;let done=false;
-    const hitSL=x=>sd===1?x<=p.sl:x>=p.sl,hitTP=x=>sd===1?x>=p.tp:x<=p.tp;
-    for(const c of cs){if(c.t<=p.entryCandleT)continue;
-      if(sd===1?c.l<=p.sl:c.h>=p.sl){closePaper(p,p.sl,'SL');done=true;break}
-      if(sd===1?c.h>=p.tp:c.l<=p.tp){closePaper(p,p.tp,'TP');done=true;break}}
-    if(!done){
-      if(hitSL(last.c)){closePaper(p,p.sl,'SL');done=true}
-      else if(hitTP(last.c)){closePaper(p,p.tp,'TP');done=true}
-      else if((Date.now()-p.openAt)/ms>=cfg.maxBars){closePaper(p,last.c,'WAKTU');done=true}
-    }
-    if(done)ch=true;
-  }
-  if(ch)save(LSJ,jr);
-}
 
 // ---------- Analisa ----------
 function analyze(sym){
@@ -405,43 +326,6 @@ function analyze(sym){
   for(const side of sidesOf(cfg)){const s=signalAt(ind,i,cfg,side,meta,price);if(s&&(!best||(s.ok&&!best.ok)||(s.ok===best.ok&&s.score>best.score)))best=s}
   const lot=best?lotFor(sym,price,Math.max(best.slPips,0.1),equity()*cfg.risk/100):null;
   S.an[sym]={price,tBase,htf,piv,fib,sr,rsi:r,atrPips:a/meta.pip,atrPct:a/price*100,biasLb,bias,sig:best,lot,meta,src:d.src,candleT:closed[i].t,lastT:cs[cs.length-1].t,cost:costPct(meta,cfg,price)};
-}
-function needRefresh(sym,force){
-  const d=S.data[sym],ms=(TFMIN[cfg.tf]||60)*60000;
-  if(force||!d||d.tf!==cfg.tf)return true;
-  if(d.err)return Date.now()-d.at>5*60000;
-  return Date.now()-d.at>=Math.max(5,cfg.refresh)*60000||Date.now()>=d.candles[d.candles.length-1].t+ms&&Date.now()-d.at>=60000;
-}
-async function scanAll(force){
-  if(S.busy)return;
-  if(!cfg.key){$('#stat').textContent='isi kunci API di Setelan';renderAll();return}
-  S.busy=true;$('#btnScan').disabled=true;
-  for(const sym of pairs()){
-    if(!needRefresh(sym,force))continue;
-    if(credits()<5){$('#stat').textContent='kredit harian hampir habis';break}
-    $('#stat').textContent='memuat '+sym+'…';
-    try{
-      const r=await fetchCandles(sym,cfg.tf,1000);
-      S.data[sym]={candles:r.cs,src:r.src,tf:cfg.tf,at:Date.now()};
-    }catch(e){S.data[sym]={err:e.message,tf:cfg.tf,at:Date.now()}}
-    analyze(sym);fireSignal(sym);renderCards();
-  }
-  updatePaper();S.last=Date.now();
-  S.busy=false;$('#btnScan').disabled=false;renderAll();
-}
-function fireSignal(sym){
-  const a=S.an[sym];if(!a||!a.sig||!a.sig.ok)return;
-  const s=a.sig;
-  if(S.lastAlert[sym]===s.candleT+'|'+s.side)return;
-  if(Date.now()-(S.lastAlert[sym+'_ts']||0)<cfg.cooldown*60000)return;
-  S.lastAlert[sym]=s.candleT+'|'+s.side;S.lastAlert[sym+'_ts']=Date.now();
-  alertSignal(sym,s,a.lot);
-  if(cfg.autoPaper)openPaper(sym,s,a.lastT,a.src);
-}
-function renderStat(){
-  const u=usage();
-  const el=$('#stat');if(!el)return;
-  if(!S.busy)el.innerHTML=(S.last?'Update '+new Date(S.last).toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta',hour12:false}):'siap')+'<br>Kredit '+u.n+'/800';
 }
 function trendChip(lb,t){return`<span class="chip ${t>0?'up':(t<0?'dn':'')}">${lb}: ${t>0?'naik':(t<0?'turun':'datar')}</span>`}
 function card(sym){
@@ -464,7 +348,7 @@ ${sigBlk}${costWarn}
 </div>`;
 }
 function renderCards(){$('#cards').innerHTML=pairs().map(card).join('')||'<div class="note">Belum ada pasangan. Isi di Setelan.</div>'}
-function renderAll(){renderBadge();renderCards();renderStat();renderJr()}
+function renderAll(){renderBadge();renderCards();renderStat();renderJr();$('#errBar').innerHTML=S.err?'<div class="badb">'+esc(S.err)+'</div>':''}
 
 // ---------- Backtest ----------
 function drawLine(cv,ys){
@@ -558,7 +442,7 @@ async function runCompare(){
 
 // ---------- Jurnal ----------
 function renderJr(){
-  const cs=jr.closed,n=cs.length,w=cs.filter(t=>t.pnl>0).length,pnl=cs.reduce((a,t)=>a+t.pnl,0),eq=cfg.balance+pnl;
+  const cs=jr.closed,n=cs.length,w=cs.filter(t=>t.pnl>0).length,pnl=jr.pnl||0,eq=cfg.balance+pnl;
   $('#jrKpi').innerHTML=`<div class="mut">Ekuitas (USD)<b class="${cl(pnl)}">${eq.toFixed(2)}</b></div><div class="mut">P&amp;L bersih<b class="${cl(pnl)}">${pnl>=0?'+':''}${pnl.toFixed(2)}</b></div><div class="mut">Transaksi<b>${n}</b></div><div class="mut">Win rate<b>${n?(w/n*100).toFixed(0):0}%</b></div>`;
   let run=0;const curve=cs.slice().reverse().map(t=>run+=t.pnl);
   if($('#tab-jr').classList.contains('on'))drawLine($('#jrCv'),curve);
@@ -572,26 +456,85 @@ function csv(){
 }
 
 // ---------- Setelan ----------
+
+// ---------- Server ----------
+let lastCall=0;
+async function throttle(){const w=lastCall+S.gap-Date.now();if(w>0)await wait(w);lastCall=Date.now()}
+async function api(action,params){
+  if(!/^https:\/\//.test(API_URL))throw new Error('API_URL di index.html belum diisi');
+  const q=new URLSearchParams(Object.assign({action:action,code:getCode()},params||{}));
+  let j;
+  try{const r=await fetch(API_URL+'?'+q.toString());j=await r.json()}
+  catch(e){throw new Error('Tidak bisa menghubungi server ('+e.message+')')}
+  if(!j||!j.ok){if(j&&j.error)throw new Error(j.error);if(j&&j.ok===false)throw new Error('Gagal');}
+  return j;
+}
+async function fetchCandles(sym,tf,size){
+  await throttle();
+  const j=await api('td',{sym:sym,tf:tf,n:size});
+  return{cs:j.cs.map(a=>({t:a[0],o:a[1],h:a[2],l:a[3],c:a[4]})),src:j.src};
+}
+async function loadData(){
+  if(S.busy)return;
+  S.busy=true;$('#btnScan').disabled=true;
+  try{
+    const j=await api('data');
+    cfg=Object.assign({},DEF,j.cfg);save(LSK,cfg);
+    S.credits=j.credits;S.scanAt=j.scanAt;S.tg=j.tg;S.hasKey=j.hasKey;
+    S.data={};S.an={};
+    Object.keys(j.pairs).forEach(sym=>{
+      const d=j.pairs[sym];
+      S.data[sym]=d.err?{err:d.err,tf:d.tf,at:d.at}:{candles:d.cs.map(a=>({t:a[0],o:a[1],h:a[2],l:a[3],c:a[4]})),src:d.src,tf:d.tf,at:d.at};
+    });
+    pairs().forEach(analyze);
+    const k=await api('journal');
+    jr={open:k.open,closed:k.closed,pnl:k.pnl};
+    S.last=Date.now();S.err='';
+    renderServerHints();
+  }catch(e){S.err=e.message}
+  S.busy=false;$('#btnScan').disabled=false;
+  fillBtSym();renderAll();
+}
+function renderServerHints(){
+  if(!S.hasKey)S.err='Server belum punya TD_KEY (isi di Script Properties).';
+}
+async function scanServer(){
+  $('#btnSrv').disabled=true;$('#stat').textContent='server memuat data, tunggu ±1 menit…';
+  try{await api('scan')}catch(e){S.err=e.message}
+  $('#btnSrv').disabled=false;await loadData();
+}
+function renderStat(){
+  const el=$('#stat');if(!el)return;
+  const t=S.scanAt?new Date(S.scanAt).toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta',hour12:false,hour:'2-digit',minute:'2-digit'}):'-';
+  el.innerHTML=(S.err?'<span class="neg">ada masalah</span>':'server '+t)+'<br>Kredit '+(S.credits==null?'-':S.credits)+'/800';
+}
+function fillBtSym(){
+  const el=$('#btSym'),v=el.value;
+  el.innerHTML='<option value="ALL">Semua pasangan</option>'+pairs().map(s=>'<option>'+s+'</option>').join('');
+  if(v)el.value=v;
+}
 function renderForm(){
   $('#form').innerHTML=FIELDS.map(([k,lb,ty,op])=>{
     const id='f_'+k;
-    if(ty==='sel')return`<label class="f" for="${id}">${lb}</label><select id="${id}">${op.map(o=>`<option value="${o[0]}" ${cfg[k]===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>`;
-    return`<label class="f" for="${id}">${lb}</label><input id="${id}" type="${ty==='num'?'number':(k==='key'||k==='tgToken'?'password':'text')}" ${ty==='num'?'step="any"':''} autocomplete="off" value="${String(cfg[k]).replace(/"/g,'&quot;')}">`;
+    if(ty==='sel')return'<label class="f" for="'+id+'">'+lb+'</label><select id="'+id+'">'+op.map(o=>'<option value="'+o[0]+'" '+(cfg[k]===o[0]?'selected':'')+'>'+o[1]+'</option>').join('')+'</select>';
+    const val=k==='code'?getCode():cfg[k];
+    return'<label class="f" for="'+id+'">'+lb+'</label><input id="'+id+'" type="'+(ty==='num'?'number':(ty==='pw'?'password':'text'))+'" '+(ty==='num'?'step="any"':'')+' autocomplete="off" value="'+String(val).replace(/"/g,'&quot;')+'">';
   }).join('');
-  $('#btSym').innerHTML='<option value="ALL">Semua pasangan</option>'+pairs().map(s=>`<option>${s}</option>`).join('');
 }
 function readForm(){
-  FIELDS.forEach(([k,,ty])=>{const el=$('#f_'+k);if(!el)return;if(ty==='num'){const v=parseFloat(el.value);if(!isNaN(v))cfg[k]=v}else cfg[k]=el.value.trim()});
-  save(LSK,cfg);renderForm();
+  const o={};
+  FIELDS.forEach(([k,,ty])=>{
+    const el=$('#f_'+k);if(!el)return;
+    if(k==='code'){try{localStorage.setItem(LSC,el.value.trim())}catch(e){}return}
+    if(ty==='num'){const v=parseFloat(el.value);if(!isNaN(v))o[k]=v}else o[k]=el.value.trim();
+  });
+  return o;
 }
 function setAuto(on){
   clearInterval(S.timer);S.timer=null;
-  if(on){
-    try{if('Notification'in window&&Notification.permission==='default')Notification.requestPermission()}catch(e){}
-    S.timer=setInterval(()=>scanAll(false),60000);scanAll(false);
-    try{navigator.wakeLock&&navigator.wakeLock.request('screen').then(w=>S.wake=w).catch(()=>{})}catch(e){}
-  }else{try{S.wake&&S.wake.release()}catch(e){}S.wake=null}
+  if(on)S.timer=setInterval(loadData,60000);
 }
+async function sendCfg(o){const j=await api('cfg',{cfg:JSON.stringify(o)});cfg=Object.assign({},DEF,j.cfg);save(LSK,cfg)}
 
 // ---------- Init ----------
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
@@ -599,24 +542,35 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='tab-'+b.dataset.tab));
   if(b.dataset.tab==='jr')renderJr();
 });
-$('#btnScan').onclick=()=>scanAll(true);
+$('#btnScan').onclick=loadData;
+$('#btnSrv').onclick=scanServer;
 $('#auto').onchange=e=>setAuto(e.target.checked);
 $('#btRun').onclick=runBt;
 $('#btCmp').onclick=runCompare;
-$('#autoPaper').checked=!!cfg.autoPaper;
-$('#autoPaper').onchange=e=>{cfg.autoPaper=e.target.checked;save(LSK,cfg)};
-$('#stSave').onclick=()=>{readForm();$('#stMsg').textContent='Tersimpan';setTimeout(()=>$('#stMsg').textContent='',2500);S.data={};S.an={};renderAll();scanAll(true)};
+$('#autoPaper').onchange=async e=>{try{await sendCfg({autoPaper:e.target.checked});S.err=''}catch(x){S.err=x.message;e.target.checked=!e.target.checked}renderAll()};
+$('#stSave').onclick=async()=>{
+  const o=readForm();$('#stMsg').textContent='Menyimpan…';
+  try{
+    await sendCfg(o);S.hist={};
+    $('#stMsg').textContent='Tersimpan. Server memuat data baru, tunggu ±1 menit.';
+    renderForm();await scanServer();$('#stMsg').textContent='Tersimpan ✓';
+  }catch(e){$('#stMsg').textContent='Gagal: '+e.message}
+};
 $('#stKey').onclick=async()=>{
-  readForm();$('#stMsg').textContent='Menguji kunci…';
-  try{const m=await td('EUR/USD','1h',100);$('#stMsg').textContent='Kunci berfungsi ✓ ('+m.length+' candle EUR/USD)'}
+  readForm();$('#stMsg').textContent='Menguji data di server…';
+  try{const j=await api('tdtest');$('#stMsg').textContent='Server berfungsi ✓ ('+j.n+' candle EUR/USD, '+j.src+')'}
   catch(e){$('#stMsg').textContent='Gagal: '+e.message}
 };
-$('#stTg').onclick=async()=>{readForm();$('#stMsg').textContent='Mengirim…';const ok=await tg('Tes Forex Radar: koneksi Telegram berhasil.');$('#stMsg').textContent=ok?'Terkirim ✓':'Gagal, cek token dan chat ID'};
+$('#stTg').onclick=async()=>{
+  readForm();$('#stMsg').textContent='Mengirim…';
+  try{const j=await api('tgtest');$('#stMsg').textContent=j.ok?'Terkirim ✓':'Gagal, cek TG_TOKEN dan TG_CHAT di Script Properties'}
+  catch(e){$('#stMsg').textContent='Gagal: '+e.message}
+};
 $('#jrCsv').onclick=csv;
-$('#jrReset').onclick=()=>{if(confirm('Hapus semua riwayat dan posisi paper?')){jr={open:[],closed:[]};save(LSJ,jr);renderJr()}};
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&S.timer)scanAll(false)});
-renderForm();renderAll();
-if(cfg.key)scanAll(false);else $('#stat').textContent='isi kunci API di Setelan';
+$('#jrReset').onclick=async()=>{if(confirm('Hapus semua riwayat dan posisi paper?')){try{await api('jrreset')}catch(e){S.err=e.message}await loadData()}};
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&S.timer)loadData()});
+renderForm();fillBtSym();renderAll();
+loadData();
 </script>
 </body>
 </html>
