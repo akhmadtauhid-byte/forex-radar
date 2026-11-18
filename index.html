@@ -8,6 +8,11 @@
 <style>
 :root{--bg:#0b0f14;--card:#121a23;--line:#1e2a37;--tx:#e6edf3;--mut:#8a99a8;--g:#2ecc71;--r:#ff5c5c;--y:#f5b942;--b:#4da3ff}
 *{box-sizing:border-box}
+html,body{max-width:100%;overflow-x:hidden}
+.row>*{min-width:0}
+.card,.note,.warn,.okb,.badb{overflow-wrap:anywhere}
+.tw{max-width:100%}
+.tw td.wrap{white-space:normal}
 body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;padding-bottom:40px}
 header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;position:sticky;top:0;background:var(--bg);z-index:5;border-bottom:1px solid var(--line)}
 h1{font-size:17px;margin:0;letter-spacing:.5px}
@@ -88,7 +93,7 @@ footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
 </section>
 
 <section id="tab-mk">
-<div class="bar"><button class="btn" id="mkLoad">Muat peringkat</button><button class="btn alt" id="mkFill">Isi data pasar</button><button class="btn alt" id="mkBt">Uji peringkat</button></div>
+<div class="bar"><button class="btn" id="mkLoad">Muat peringkat</button><button class="btn alt" id="mkFill">Isi data pasar</button><button class="btn alt" id="mkLive">Perbarui harga</button><button class="btn alt" id="mkBt">Uji peringkat</button></div>
 <div class="mut" id="mkMsg"></div>
 <div class="note">Peringkat memakai data harian 28 pasangan mayor dan minor serta emas. Skor menggabungkan arah EMA20 dan EMA50, momentum 5 dan 20 hari (disesuaikan dengan volatilitas), dan kekuatan tren (ADX). Ini gambaran kondisi pasar, <b>bukan prediksi</b>: pasangan yang sudah naik jauh bisa saja berbalik. "Uji peringkat" memeriksa apakah mengikuti peringkat ini pernah menguntungkan setelah spread.</div>
 <div id="mkOut"></div>
@@ -284,7 +289,7 @@ function lotFor(sym,price,slPips,riskUSD,rates){
 const API_URL='https://script.google.com/macros/s/AKfycbwpcTcOroRq8A3oywj1V99YIhX0YWKR-D5LlYwW_8N462U0DEDPaz8PhASn1dKVowmLXg/exec';
 const $=s=>document.querySelector(s);
 const LSK='forexradar.cfg.v2',LSC='forexradar.code.v2',LSB='forexradar.bt.v1';
-const DEF={tf:'1h',mode:'pullback',sides:'both',pairs:'EUR/USD,GBP/USD,USD/JPY,AUD/USD,USD/CAD,USD/CHF,XAU/USD',spreads:'',slip:0.3,tpAtr:2,slAtr:1,minScore:60,minRR:1,maxBars:24,cooldown:30,balance:100,risk:1,autoPaper:false,autoTop:3,digest:'on'};
+const DEF={tf:'1h',mode:'pullback',sides:'both',pairs:'EUR/USD,GBP/USD,USD/JPY,AUD/USD,USD/CAD,USD/CHF,XAU/USD',spreads:'',slip:0.3,tpAtr:2,slAtr:1,minScore:60,minRR:1,maxBars:24,cooldown:30,balance:100,risk:1,autoPaper:false,autoTop:3,digest:'on',moveAlert:'on',moveAtr:0.8};
 const MODES={pullback:'Pantulan EMA21',momentum:'Momentum',donchian:'Breakout 55 candle'};
 const FIELDS=[
 ['code','Kode akses (disimpan di perangkat ini)','pw'],
@@ -303,7 +308,9 @@ const FIELDS=[
 ['balance','Modal akun (USD)','num'],
 ['risk','Risiko per transaksi (% modal)','num'],
 ['autoTop','Pasangan teratas otomatis dari tab Pasar (0-3)','num'],
-['digest','Kirim ringkasan pasar harian ke Telegram','sel',[['on','Ya'],['off','Tidak']]]
+['digest','Kirim ringkasan pasar harian ke Telegram','sel',[['on','Ya'],['off','Tidak']]],
+['moveAlert','Alert Telegram saat ada gerak besar (tab Pasar)','sel',[['on','Ya'],['off','Tidak']]],
+['moveAtr','Ambang gerak alert, kelipatan rata-rata gerak harian (0.3-3)','num']
 ];
 function load(k,d){try{const x=JSON.parse(localStorage.getItem(k));return x?x:d}catch(e){return d}}
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
@@ -570,6 +577,22 @@ async function loadMarket(){
     $('#mkMsg').textContent='Data pasar terisi '+j.have+' dari '+j.total+' pasangan';
   }catch(e){$('#mkOut').innerHTML='<div class="badb">'+esc(e.message)+'</div>';$('#mkMsg').textContent=''}
 }
+function ago(t){const m=Math.round((Date.now()-t)/60000);return m<1?'baru saja':(m<60?m+' menit lalu':(Math.round(m/6)/10)+' jam lalu')}
+function liveHtml(j){
+  const L=j.live||[];
+  const th=cfg.moveAtr||0.8;
+  let h='<h3>Gerakan terbaru hari ini</h3>';
+  if(!L.length){return h+'<div class="note">Harga terbaru belum ada. Tekan "Perbarui harga" (sekitar 4 menit untuk semua pasangan), atau tunggu server memperbaruinya otomatis tiap 3 jam saat pasar buka.'+(j.closed?' Pasar sedang tutup (akhir pekan).':'')+'</div>'+rulesHtml(th)}
+  const up=L.filter(x=>x.chg>0).slice(0,5),dn=L.filter(x=>x.chg<0).slice(-5).reverse();
+  const card=x=>'<div class="card '+(x.chg>0?'buy':'sell')+'"><div class="row"><span class="sym">'+x.sym+'</span><span class="'+cl(x.chg)+'"><b>'+sgn(x.chg,2)+'%</b> <span class="mut">('+Math.abs(x.ratio).toFixed(1)+'x)</span></span></div><div class="chips"><span class="chip '+(x.chg>0?'up':'dn')+'">'+esc(x.tag)+'</span>'+(Math.abs(x.ratio)>=th?'<span class="chip">Lewat ambang alert</span>':'')+'</div><div class="note" style="margin:6px 0 0">'+esc(x.note)+'</div></div>';
+  h+='<div class="note">Dibandingkan penutupan harian kemarin. Harga diperbarui '+ago(j.liveAt)+'. Angka dalam kurung = kelipatan rata-rata gerak harian (ATR).'+(j.closed?' Pasar sedang tutup.':'')+'</div>';
+  h+='<div class="note"><b>Sedang naik</b></div>'+(up.length?up.map(card).join(''):'<div class="note">Belum ada yang naik.</div>');
+  h+='<div class="note"><b>Sedang turun</b></div>'+(dn.length?dn.map(card).join(''):'<div class="note">Belum ada yang turun.</div>');
+  return h+rulesHtml(th);
+}
+function rulesHtml(th){
+  return'<div class="warn"><b>Aturan alert</b><br>1) Alert Telegram dikirim bila gerak hari ini mencapai '+th+'x rata-rata gerak harian, maksimal sekali per arah per hari dan 6 alert per hari.<br>2) "Searah tren harian": gerak sejalan dengan peringkat. Lebih aman menunggu koreksi kecil, jangan mengejar harga.<br>3) "Melawan tren harian": kemungkinan hanya pantulan, rawan balik.<br>4) Gerak lebih dari 1,5x rata-rata harian = rawan jenuh.<br>5) Ini informasi, bukan perintah transaksi. Cek grafik di Finex dan selalu pasang stop loss.</div>';
+}
 function renderMarket(){
   const j=S.mk;if(!j)return;
   const r=j.res;
@@ -577,7 +600,8 @@ function renderMarket(){
   const when=new Date(r.lastT).toLocaleDateString('id-ID',{timeZone:'UTC',day:'2-digit',month:'short',year:'numeric'});
   const errs=Object.keys(j.errs||{});
   const mx=Math.max(1,...r.strength.map(x=>Math.abs(x.score)));
-  let h='<div class="note">Berdasarkan candle harian yang ditutup '+when+' (UTC). Data terisi '+j.have+' dari '+j.total+' pasangan.'+(errs.length?' Gagal dimuat: '+esc(errs.join(', '))+'.':'')+'</div>';
+  let h=liveHtml(j);
+  h+='<div class="note">Berdasarkan candle harian yang ditutup '+when+' (UTC). Data terisi '+j.have+' dari '+j.total+' pasangan.'+(errs.length?' Gagal dimuat: '+esc(errs.join(', '))+'.':'')+'</div>';
   h+='<h3>Kekuatan mata uang</h3><div class="card">'+r.strength.map(x=>{
     const w=Math.abs(x.score)/mx*50;
     return'<div class="row" style="margin:5px 0"><b style="width:40px">'+x.cur+'</b><div style="flex:1;position:relative;height:14px;background:#0e151d;border-radius:7px"><div style="position:absolute;top:0;height:14px;border-radius:7px;background:'+(x.score>=0?'var(--g)':'var(--r)')+';'+(x.score>=0?'left:50%':'right:50%')+';width:'+w+'%"></div></div><span style="width:46px;text-align:right" class="'+cl(x.score)+'">'+sgn(x.score,0)+'</span></div>';
@@ -585,10 +609,11 @@ function renderMarket(){
   h+='<h3>Kandidat perhatian</h3>';
   if(r.picks.length)h+=r.picks.map(p=>'<div class="card '+(p.dir>0?'buy':'sell')+'"><div class="row"><span class="sym">'+p.sym+'</span><span class="badge '+(p.dir>0?'buy':'sell')+'">'+(p.dir>0?'Condong beli':'Condong jual')+'</span></div><div class="note" style="margin:6px 0 0">Selisih kekuatan '+Math.abs(p.diff).toFixed(0)+' · skor '+sgn(p.score,0)+' · ADX '+p.adx.toFixed(0)+(p.flags.length?'<br><span class="rej">'+esc(p.flags.join(' · '))+'</span>':'')+'</div></div>').join('');
   else h+='<div class="note">Belum ada pasangan dengan selisih kekuatan yang jelas dan searah dengan tren.</div>';
-  h+='<div class="note">'+((j.top&&j.top.length)?'Pilihan teratas ini ('+esc(j.top.join(', '))+') otomatis ikut dianalisa tiap jam di tab Analisa (diatur di Setelan, "Pasangan teratas otomatis").':'Pilihan otomatis ke tab Analisa mati atau belum ada. Atur di Setelan.')+'</div>';
+  h+='<div class="note">'+((j.top&&j.top.length)?'Pilihan teratas ini ('+esc(j.top.join(', '))+', dipilih dari candle harian yang sudah tutup) otomatis ikut dianalisa tiap jam di tab Analisa (diatur di Setelan, "Pasangan teratas otomatis").':'Pilihan otomatis ke tab Analisa mati atau belum ada. Atur di Setelan.')+'</div>';
   const emas=r.rows.filter(x=>x.sym==='XAU/USD')[0];
-  h+='<h3>Peringkat semua pasangan</h3><div class="tw"><table><tr><th>Pasangan</th><th>Skor</th><th>1H</th><th>5H</th><th>20H</th><th>ADX</th><th>RSI</th><th>Kondisi</th></tr>'+r.rows.map(x=>'<tr><td>'+x.sym+'</td><td class="'+cl(x.score)+'"><b>'+sgn(x.score,0)+'</b></td><td class="'+cl(x.r1)+'">'+sgn(x.r1,2)+'%</td><td class="'+cl(x.r5)+'">'+sgn(x.r5,1)+'%</td><td class="'+cl(x.r20)+'">'+sgn(x.r20,1)+'%</td><td>'+x.adx.toFixed(0)+'</td><td>'+x.rsi.toFixed(0)+'</td><td>'+x.label+'</td></tr>'+(x.flags.length?'<tr><td colspan="8" style="text-align:left;color:var(--y);font-size:11px">'+esc(x.sym)+': '+esc(x.flags.join(' · '))+'</td></tr>':'')).join('')+'</table></div>';
-  h+='<div class="note">Skor -100 sampai +100: makin besar makin kuat tren naik, makin kecil makin kuat tren turun. Label "Jenuh" atau "Jauh dari EMA20" menandakan harga sudah bergerak jauh dan rawan berbalik, jadi jangan dibaca sebagai ajakan mengejar harga.</div>';
+  const nl=r.rows.filter(x=>x.live).length;
+  h+='<h3>Peringkat semua pasangan</h3><div class="note">'+(nl?'Skor memakai harga terbaru ('+nl+' dari '+r.rows.length+' pasangan, diperbarui '+ago(j.liveAt)+'), jadi mengikuti kondisi sekarang. Kolom "Harian" = skor dari candle yang sudah tutup. Kolom "Hari ini" = perubahan sejak penutupan kemarin.':'Harga terbaru belum ada, jadi skor masih dari candle harian yang sudah tutup. Tekan "Perbarui harga".')+(nl&&Date.now()-j.liveAt>3600000&&!j.closed?' <b>Harga sudah lebih dari 1 jam, tekan "Perbarui harga" untuk kondisi terkini.</b>':'')+'</div><div class="tw"><table><tr><th>Pasangan</th><th>Skor</th><th>Harian</th><th>Hari ini</th><th>ADX</th><th>RSI</th></tr>'+r.rows.map(x=>'<tr><td>'+x.sym+'</td><td class="'+cl(x.score)+'"><b>'+sgn(x.score,0)+'</b></td><td class="'+cl(x.s0===undefined?x.score:x.s0)+'">'+sgn(x.s0===undefined?x.score:x.s0,0)+'</td><td class="'+cl(x.chg||0)+'">'+(x.live?sgn(x.chg,2)+'%':'-')+'</td><td>'+x.adx.toFixed(0)+'</td><td>'+x.rsi.toFixed(0)+'</td></tr><tr><td colspan="6" class="wrap" style="text-align:left;font-size:11px;color:'+(x.live&&x.status&&/Pantulan|Koreksi|Berbalik/.test(x.status)?'var(--y)':'var(--mut)')+'">'+(x.live&&x.status?esc(x.status):esc(x.label))+(x.flags.length?' · '+esc(x.flags.join(' · ')):'')+'</td></tr>').join('')+'</table></div>';
+  h+='<div class="note">Skor -100 sampai +100: makin besar makin kuat tren naik, makin kecil makin kuat tren turun. "Pantulan naik, tren harian masih turun" berarti harga sedang naik tetapi tren yang lebih besar belum berbalik, jadi rawan kembali turun. Label "Jenuh" atau "Jauh dari EMA20" menandakan harga sudah bergerak jauh, jangan dibaca sebagai ajakan mengejar harga.</div>';
   $('#mkOut').innerHTML=h;
 }
 async function fillMarket(){
@@ -602,6 +627,21 @@ async function fillMarket(){
     }
   }catch(e){$('#mkMsg').textContent='Gagal: '+e.message}
   $('#mkFill').disabled=false;$('#mkLoad').disabled=false;$('#mkBt').disabled=false;
+  await loadMarket();
+}
+async function fillLive(){
+  ['mkFill','mkLoad','mkBt','mkLive'].forEach(i=>$('#'+i).disabled=true);
+  try{
+    for(let k=0;k<5;k++){
+      $('#mkMsg').textContent='Memperbarui harga, tahap '+(k+1)+'. Jangan tutup halaman.';
+      const j=await api('live');
+      if(j.error&&!j.fetched)throw new Error(j.error);
+      $('#mkMsg').textContent='Harga terbarui, sisa '+j.remaining+' pasangan';
+      if(!j.remaining||!j.fetched)break;
+      await new Promise(r=>setTimeout(r,62000));
+    }
+  }catch(e){$('#mkMsg').textContent='Gagal: '+e.message}
+  ['mkFill','mkLoad','mkBt','mkLive'].forEach(i=>$('#'+i).disabled=false);
   await loadMarket();
 }
 function mkRow(name,x){return'<tr><td>'+name+'</td><td>'+x.n+'</td><td>'+x.wr.toFixed(0)+'%</td><td class="'+cl(x.sum)+'">'+sgn(x.sum,1)+'%</td><td>'+(x.pf>=99?'∞':x.pf.toFixed(2))+'</td><td class="'+cl(x.oosSum)+'">'+sgn(x.oosSum,1)+'%</td><td>'+(x.pass?'✓':'✗')+'</td></tr>'}
@@ -631,6 +671,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 $('#btnScan').onclick=loadData;
 $('#mkLoad').onclick=loadMarket;
 $('#mkFill').onclick=fillMarket;
+$('#mkLive').onclick=fillLive;
 $('#mkBt').onclick=runMktBt;
 $('#btnSrv').onclick=scanServer;
 $('#auto').onchange=e=>setAuto(e.target.checked);
