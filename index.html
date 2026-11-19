@@ -74,6 +74,7 @@ footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
 <nav>
 <button data-tab="an" class="on">Analisa</button>
 <button data-tab="mk">Pasar</button>
+<button data-tab="pl">Rencana</button>
 <button data-tab="bt">Backtest</button>
 <button data-tab="jr">Jurnal</button>
 <button data-tab="st">Setelan</button>
@@ -98,6 +99,13 @@ footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
 <div class="note">Peringkat memakai data harian 28 pasangan mayor dan minor serta emas. Skor menggabungkan arah EMA20 dan EMA50, momentum 5 dan 20 hari (disesuaikan dengan volatilitas), dan kekuatan tren (ADX). Ini gambaran kondisi pasar, <b>bukan prediksi</b>: pasangan yang sudah naik jauh bisa saja berbalik. "Uji peringkat" memeriksa apakah mengikuti peringkat ini pernah menguntungkan setelah spread.</div>
 <div id="mkOut"></div>
 <div id="mkBtOut"></div>
+</section>
+
+<section id="tab-pl">
+<div class="bar"><button class="btn" id="plLoad">Buat rencana hari ini</button></div>
+<div class="mut" id="plMsg"></div>
+<div class="note">Rencana order pending (Buy Stop atau Sell Stop) dari kandidat tab Pasar: level masuk di atas atau di bawah high atau low dua hari terakhir, stop loss dan target berdasarkan ATR harian, lot dari risiko di Setelan. Pasangan yang jenuh, trennya lemah, atau levelnya jauh tidak dibuatkan rencana. Ini bahan pertimbangan, bukan perintah. Batalkan order yang belum terisi saat penutupan harian.</div>
+<div id="plOut"></div>
 </section>
 
 <section id="tab-bt">
@@ -661,17 +669,46 @@ async function runMktBt(){
   $('#mkBt').disabled=false;
 }
 
+// ---------- Rencana ----------
+function planCard(x){
+  const h='<div class="card '+(x.dir>0?'buy':'sell')+'"><div class="row"><span class="sym">'+x.sym+' <span class="mut">('+x.name+')</span></span><span class="badge '+(x.dir>0?'buy':'sell')+'">'+(x.status==='siap'?x.type:'Tunggu')+'</span></div>';
+  if(x.status!=='siap')return h+'<div class="rej">'+esc(x.reason)+'</div><div class="note" style="margin:6px 0 0">Harga '+x.price.toFixed(x.price<10?5:3)+(x.live?' (terbaru)':' (penutupan kemarin)')+' · skor '+sgn(x.score,0)+' · ADX '+x.adx.toFixed(0)+'</div></div>';
+  const f=x.fmt,risky=x.riskPct>2;
+  return h+'<div class="grid"><div class="mut">Pasang '+x.type+' di<b>'+f.entry+'</b></div><div class="mut">Stop loss<b class="neg">'+f.sl+'</b>'+x.slPips.toFixed(0)+' pip</div><div class="mut">Target<b class="pos">'+f.tp+'</b>'+x.tpPips.toFixed(0)+' pip</div></div>'
+   +'<div class="note" style="margin:8px 0 0">Harga sekarang '+f.price+(x.live?' (terbaru)':' (penutupan kemarin)')+', jarak ke level masuk '+x.distPips.toFixed(0)+' pip · level breakout '+f.level+' · R:R bersih '+x.rr.toFixed(2)+' · lot '+x.lot.toFixed(2)+(x.approx?' (nilai pip perkiraan, cek di MT5)':'')+'</div>'
+   +(risky?'<div class="badb">Risiko aktual sekitar $'+x.riskAt.toFixed(2)+' ('+x.riskPct.toFixed(0)+'% saldo). Lot minimum 0,01 sudah lebih besar dari risiko yang Anda atur ('+'target '+(S.plan?S.plan.riskPct:1)+'%). Sebaiknya jangan dipasang dengan saldo ini, atau pilih pasangan dengan stop lebih dekat.</div>':'<div class="okb">Risiko aktual sekitar $'+x.riskAt.toFixed(2)+' ('+x.riskPct.toFixed(1)+'% saldo).</div>')
+   +'<div class="chips"><span class="chip">Skor '+sgn(x.score,0)+'</span><span class="chip">ADX '+x.adx.toFixed(0)+'</span><span class="chip">ATR harian '+x.atrPips.toFixed(0)+' pip</span></div></div>';
+}
+async function loadPlan(){
+  $('#plLoad').disabled=true;$('#plMsg').textContent='Menyusun rencana…';
+  try{
+    const j=await api('plan');
+    if(!j.ok)throw new Error(j.error||'Gagal');
+    S.plan=j;
+    const rdy=j.plans.filter(x=>x.status==='siap'),wt=j.plans.filter(x=>x.status!=='siap');
+    let h='<div class="note">Saldo acuan $'+j.equity.toFixed(2)+' (dari Setelan "saldo" ditambah hasil paper), risiko '+j.riskPct+'% per transaksi, stop '+j.slAtr+' ATR, target '+j.tpAtr+' ATR. '+(j.liveAt?'Harga diperbarui '+ago(j.liveAt)+'.':'Harga terbaru belum ada, tekan "Perbarui harga" di tab Pasar.')+'</div>';
+    if(!j.plans.length)h+='<div class="warn">Belum ada kandidat. Pastikan data pasar terisi (tab Pasar).</div>';
+    if(rdy.length)h+='<h3>Siap dipertimbangkan</h3>'+rdy.map(planCard).join('');
+    else if(j.plans.length)h+='<div class="warn">Tidak ada rencana yang memenuhi syarat saat ini. Itu wajar: lebih baik menunggu daripada memaksa masuk.</div>';
+    if(wt.length)h+='<h3>Belum layak, tunggu</h3>'+wt.map(planCard).join('');
+    $('#plOut').innerHTML=h;$('#plMsg').textContent='';
+  }catch(e){$('#plMsg').textContent='Gagal: '+e.message}
+  $('#plLoad').disabled=false;
+}
+
 // ---------- Init ----------
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='tab-'+b.dataset.tab));
   if(b.dataset.tab==='jr')renderJr();
   if(b.dataset.tab==='mk'&&!S.mk)loadMarket();
+  if(b.dataset.tab==='pl'&&!S.plan)loadPlan();
 });
 $('#btnScan').onclick=loadData;
 $('#mkLoad').onclick=loadMarket;
 $('#mkFill').onclick=fillMarket;
 $('#mkLive').onclick=fillLive;
+$('#plLoad').onclick=loadPlan;
 $('#mkBt').onclick=runMktBt;
 $('#btnSrv').onclick=scanServer;
 $('#auto').onchange=e=>setAuto(e.target.checked);
