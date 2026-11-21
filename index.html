@@ -96,6 +96,7 @@ footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
 <div class="warn">Forex dan emas biasanya diperdagangkan dengan leverage, sehingga rugi bisa lebih besar dari modal setoran. Sistem ini alat bantu analisa, bukan jaminan untung. Pemindaian dan alarm Telegram berjalan di server tiap 15 menit; halaman ini hanya menampilkan hasilnya.</div>
 <div id="errBar"></div>
 <div id="cfgBar"></div>
+<div id="quick"></div>
 <div id="cards"></div>
 </section>
 
@@ -403,7 +404,47 @@ ${sigBlk}${costWarn}
 ${tvBtn(sym,'60')}${aiBtn(sym)}
 </div>`;
 }
-function renderCards(){$('#cards').innerHTML=pairs().map(card).join('')||'<div class="note">Belum ada pasangan. Isi di Setelan.</div>'}
+
+// ---------- Ringkasan keputusan cepat ----------
+function quickChecks(sym,a){
+  const s=a.sig,side=s.side,eq=cfg.balance+((typeof jr!=='undefined'&&jr&&jr.pnl)||0);
+  const mrow=S.mk&&S.mk.res&&S.mk.res.rows?S.mk.res.rows.find(r=>r.sym===sym):null;
+  const jen=(side===1&&a.rsi>70)||(side===-1&&a.rsi<30)||!!(mrow&&mrow.flags&&mrow.flags.some(f=>/Jenuh|Jauh dari EMA20/.test(f)));
+  const opp=a.htf.filter(x=>x.t===-side&&/4 jam|1 hari/.test(x.lb)).map(x=>x.lb);
+  const dist=Math.abs(a.price-s.entry)/a.meta.pip;
+  const risk=eq>0?a.lot.riskAt/eq*100:99;
+  return [
+    {ok:a.tBase===side&&!opp.length,t:'Tren searah',bad:opp.length?'Melawan tren '+opp.join(' dan '):'Tren dasar belum searah'},
+    {ok:!jen,t:'Tidak jenuh',bad:'Sudah jenuh, rawan berbalik'},
+    {ok:s.rr>=1.5,t:'R:R '+s.rr.toFixed(1),bad:'R:R bersih '+s.rr.toFixed(2)+' (kurang dari 1,5)'},
+    {ok:a.cost<=0.25*a.atrPct,t:'Spread wajar',bad:'Biaya spread besar'},
+    {ok:dist<=0.5*a.atrPips,t:'Harga dekat Masuk',bad:'Harga sudah '+dist.toFixed(0)+' pip dari Masuk, jangan mengejar'},
+    {ok:risk<=2,t:'Risiko '+risk.toFixed(1)+'%',bad:'Risiko lot '+risk.toFixed(0)+'% saldo (terlalu besar)'}
+  ];
+}
+function renderQuick(){
+  const el=$('#quick');if(!el)return;
+  const L=[],none=[];
+  pairs().forEach(sym=>{const a=S.an[sym];if(!a)return;if(a.sig&&a.sig.ok){const c=quickChecks(sym,a);L.push({sym,a,c,fails:c.filter(x=>!x.ok)})}else none.push(sym)});
+  L.sort((x,y)=>x.fails.length-y.fails.length);
+  const ready=L.filter(x=>!x.fails.length).length;
+  let h='<h3>Keputusan cepat</h3><div class="note">'+(L.length?'<b>'+ready+' siap</b>, '+(L.length-ready)+' perlu hati-hati. Hanya pasangan dengan sinyal yang ditampilkan di sini.':'Belum ada pasangan dengan sinyal saat ini. Artinya tunggu, bukan beli.')+'</div>';
+  h+=L.map(x=>{
+    const s=x.a.sig,sym=x.sym,f=x.fails.length,buy=s.side===1;
+    const v=f===0?['SIAP '+(buy?'BELI':'JUAL'),'okb']:(f===1?['HATI-HATI','warn']:['LEWATI','badb']);
+    return '<div class="card '+(buy?'buy':'sell')+'"><div class="row"><span class="sym">'+sym+'</span><span class="badge '+(buy?'buy':'sell')+'">'+(buy?'BELI':'JUAL')+'</span></div>'
+     +'<div class="'+v[1]+'" style="margin:8px 0;font-weight:700">'+v[0]+(f?' ('+f+' catatan)':'')+'</div>'
+     +'<div class="grid"><div class="mut">Masuk<b>'+fp(sym,s.entry)+'</b>&nbsp;</div><div class="mut">Target<b class="pos">'+fp(sym,s.tp)+'</b>'+s.tpPips.toFixed(0)+' pip</div><div class="mut">Stop loss<b class="neg">'+fp(sym,s.sl)+'</b>'+s.slPips.toFixed(0)+' pip</div></div>'
+     +'<div class="chips">'+x.c.map(k=>'<span class="chip '+(k.ok?'up':'dn')+'">'+(k.ok?'✓ ':'✗ ')+esc(k.t)+'</span>').join('')+'</div>'
+     +(f?'<div class="rej">'+x.fails.map(k=>esc(k.bad)).join('. ')+'.</div>':'')
+     +cpRow({sym:sym,entry:s.entry,sl:s.sl,tp:s.tp,lot:x.a.lot.lot})
+     +'<div class="acts"><button class="btn" data-real="'+(()=>{const k='r'+(++rlN);S.rl[k]={sym:sym,side:s.side,entry:s.entry,sl:s.sl,tp:s.tp,lot:x.a.lot.lot};return k})()+'">Saya masuk (catat posisi)</button></div>'
+     +tvBtn(sym,'60')+'</div>';
+  }).join('');
+  if(none.length)h+='<div class="note"><b>Tanpa sinyal ('+none.length+'):</b> '+none.map(s=>esc(s)).join(', ')+'. Tunggu.</div>';
+  el.innerHTML=h;
+}
+function renderCards(){renderQuick();$('#cards').innerHTML=pairs().map(card).join('')||'<div class="note">Belum ada pasangan. Isi di Setelan.</div>'}
 function renderAll(){renderBadge();renderCards();renderStat();renderJr();$('#errBar').innerHTML=S.err?'<div class="badb">'+esc(S.err)+'</div>':''}
 
 // ---------- Backtest ----------
