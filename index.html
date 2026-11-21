@@ -47,6 +47,11 @@ button{cursor:pointer;font-family:inherit}
 .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 .chip{font-size:11px;background:#0e151d;border:1px solid var(--line);border-radius:12px;padding:2px 8px;color:var(--mut)}
 .chip.up{color:var(--g);border-color:#1f6b3d}.chip.dn{color:var(--r);border-color:#6b2020}
+.lad{width:100%;height:auto;display:block;margin:8px 0 2px}
+.tvw{margin-top:8px}.tvw .btn{padding:7px 10px;font-size:12px}.tvw a{font-size:12px;color:var(--b);margin-left:8px}
+.tvbox{margin-top:8px;border-radius:10px;overflow:hidden;background:#0e151d}.tvbox iframe{width:100%;height:340px;border:0;display:block}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.acts .btn{padding:8px 12px;font-size:13px}
+.pst{font-size:11px;padding:2px 8px;border-radius:8px;background:#12233a}
 .sig{background:#0e151d;border-radius:10px;padding:10px;margin-top:10px;font-size:12px}
 .rej{font-size:12px;color:var(--y);margin-top:8px}
 label.f{display:block;margin:10px 0 4px;color:var(--mut);font-size:12px}
@@ -75,6 +80,7 @@ footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
 <button data-tab="an" class="on">Analisa</button>
 <button data-tab="mk">Pasar</button>
 <button data-tab="pl">Rencana</button>
+<button data-tab="ps">Posisi</button>
 <button data-tab="bt">Backtest</button>
 <button data-tab="jr">Jurnal</button>
 <button data-tab="st">Setelan</button>
@@ -106,6 +112,13 @@ footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
 <div class="mut" id="plMsg"></div>
 <div class="note">Rencana order pending (Buy Stop atau Sell Stop) dari kandidat tab Pasar: level masuk di atas atau di bawah high atau low dua hari terakhir, stop loss dan target berdasarkan ATR harian, lot dari risiko di Setelan. Pasangan yang jenuh, trennya lemah, atau levelnya jauh tidak dibuatkan rencana. Ini bahan pertimbangan, bukan perintah. Batalkan order yang belum terisi saat penutupan harian.</div>
 <div id="plOut"></div>
+</section>
+
+<section id="tab-ps">
+<div class="bar"><button class="btn" id="psLoad">Muat posisi</button><button class="btn alt" id="psFresh">Perbarui harga</button></div>
+<div class="mut" id="psMsg"></div>
+<div class="note">Posisi yang Anda catat lewat tombol "Saya masuk" di kartu sinyal atau rencana. Server memantau harganya dan mengirim Telegram bila mendekati Stop Loss atau Take Profit, menyentuh keduanya, atau sudah untung 1R. Harga diperbarui sekitar tiap 15 sampai 30 menit untuk menghemat kredit, jadi untuk harga detik ini tetap lihat Finex. Pencatatan ini hanya pemantau, tidak mengirim order ke Finex.</div>
+<div id="psOut"></div>
 </section>
 
 <section id="tab-bt">
@@ -297,7 +310,7 @@ function lotFor(sym,price,slPips,riskUSD,rates){
 const API_URL='https://script.google.com/macros/s/AKfycbwpcTcOroRq8A3oywj1V99YIhX0YWKR-D5LlYwW_8N462U0DEDPaz8PhASn1dKVowmLXg/exec';
 const $=s=>document.querySelector(s);
 const LSK='forexradar.cfg.v2',LSC='forexradar.code.v2',LSB='forexradar.bt.v1';
-const DEF={tf:'1h',mode:'pullback',sides:'both',pairs:'EUR/USD,GBP/USD,USD/JPY,AUD/USD,USD/CAD,USD/CHF,XAU/USD',spreads:'',slip:0.3,tpAtr:2,slAtr:1,minScore:60,minRR:1,maxBars:24,cooldown:30,balance:100,risk:1,autoPaper:false,autoTop:3,digest:'on',moveAlert:'on',moveAtr:0.8};
+const DEF={tf:'1h',mode:'pullback',sides:'bo1AscXDwGYA9RMuDbmoBPwqdqVOvJsGyqKoHWVVC8230Qth',pairs:'EUR/USD,GBP/USD,USD/JPY,AUD/USD,USD/CAD,USD/CHF,XAU/USD',spreads:'',slip:0.3,tpAtr:2,slAtr:1,minScore:60,minRR:1,maxBars:24,cooldown:30,balance:100,risk:1,autoPaper:false,autoTop:3,digest:'on',moveAlert:'on',moveAtr:0.8};
 const MODES={pullback:'Pantulan EMA21',momentum:'Momentum',donchian:'Breakout 55 candle'};
 const FIELDS=[
 ['code','Kode akses (disimpan di perangkat ini)','pw'],
@@ -374,7 +387,7 @@ function card(sym){
   if(!a)return`<div class="card"><b>${sym}</b> <span class="mut">data belum cukup</span></div>`;
   const s=a.sig,ok=s&&s.ok,cls=ok?(s.side===1?'buy':'sell'):'';
   const pv=a.piv,fb=a.fib;
-  const sigBlk=ok?`<div class="sig"><b>${s.side===1?'SINYAL BELI':'SINYAL JUAL'}</b> · skor ${s.score}/100 · ${MODES[cfg.mode]}<div class="grid"><div class="mut">Masuk<b>${fp(sym,s.entry)}</b>&nbsp;</div><div class="mut">Target<b class="pos">${fp(sym,s.tp)}</b>${s.tpPips.toFixed(0)} pip</div><div class="mut">Stop loss<b class="neg">${fp(sym,s.sl)}</b>${s.slPips.toFixed(0)} pip</div></div><div class="note" style="margin:8px 0 0">R:R bersih ${s.rr.toFixed(2)} · biaya spread ${s.cost.toFixed(3)}% · lot ±${a.lot.lot.toFixed(2)} (risiko aktual ±${a.lot.riskAt.toFixed(2)} USD${a.lot.approx?', nilai pip perkiraan, cek lot di MT5':''})</div><div class="chips">${s.why.map(w=>`<span class="chip">${w}</span>`).join('')}</div></div>`
+  const sigBlk=ok?`<div class="sig"><b>${s.side===1?'SINYAL BELI':'SINYAL JUAL'}</b> · skor ${s.score}/100 · ${MODES[cfg.mode]}<div class="grid"><div class="mut">Masuk<b>${fp(sym,s.entry)}</b>&nbsp;</div><div class="mut">Target<b class="pos">${fp(sym,s.tp)}</b>${s.tpPips.toFixed(0)} pip</div><div class="mut">Stop loss<b class="neg">${fp(sym,s.sl)}</b>${s.slPips.toFixed(0)} pip</div></div>${ladder({sym:sym,side:s.side,entry:s.entry,sl:s.sl,tp:s.tp,cur:a.price})}<div class="note" style="margin:8px 0 0">R:R bersih ${s.rr.toFixed(2)} · biaya spread ${s.cost.toFixed(3)}% · lot ±${a.lot.lot.toFixed(2)} (risiko aktual ±${a.lot.riskAt.toFixed(2)} USD${a.lot.approx?', nilai pip perkiraan, cek lot di MT5':''})</div><div class="chips">${s.why.map(w=>`<span class="chip">${w}</span>`).join('')}</div>${enterBtn({sym:sym,side:s.side,entry:s.entry,sl:s.sl,tp:s.tp,lot:a.lot.lot})}</div>`
   :(s?`<div class="rej">Belum ada sinyal: ${s.reject}</div>`:'');
   const costWarn=a.cost>0.25*a.atrPct?`<div class="rej">Biaya spread besar dibanding gerak harga (ATR ${a.atrPct.toFixed(2)}%).</div>`:'';
   return`<div class="card ${cls}">
@@ -384,6 +397,7 @@ function card(sym){
 ${pv?`<div class="lv"><span>R2 <b>${fp(sym,pv.R2)}</b></span><span>R1 <b>${fp(sym,pv.R1)}</b></span><span>Pivot <b>${fp(sym,pv.P)}</b></span><span>S1 <b>${fp(sym,pv.S1)}</b></span><span>S2 <b>${fp(sym,pv.S2)}</b></span><span>${a.sr.res?'Resistance dekat <b>'+fp(sym,a.sr.res)+'</b>':'&nbsp;'}</span><span>${a.sr.sup?'Support dekat <b>'+fp(sym,a.sr.sup)+'</b>':'&nbsp;'}</span></div>`:''}
 ${fb?`<div class="chips"><span class="chip">Fibonacci (${fb.up?'ayunan naik':'ayunan turun'})</span>${fb.levels.map(x=>`<span class="chip">${(x.r*100).toFixed(1)}% ${fp(sym,x.v)}</span>`).join('')}</div>`:''}
 ${sigBlk}${costWarn}
+${tvBtn(sym,'60')}
 </div>`;
 }
 function renderCards(){$('#cards').innerHTML=pairs().map(card).join('')||'<div class="note">Belum ada pasangan. Isi di Setelan.</div>'}
@@ -617,7 +631,7 @@ function renderMarket(){
   }).join('')+'</div>';
   h+='<h3>Kandidat perhatian</h3>';
   const rowOf={};r.rows.forEach(x=>rowOf[x.sym]=x);
-  if(r.picks.length)h+=r.picks.map(p=>{const w=rowOf[p.sym]||{},ext=p.flags.some(f=>/Jenuh|Jauh dari EMA20/.test(f));return'<div class="card '+(p.dir>0?'buy':'sell')+'"><div class="row"><span class="sym">'+p.sym+'</span><span class="badge '+(p.dir>0?'buy':'sell')+'">'+(p.dir>0?'Condong beli':'Condong jual')+'</span></div><div class="note" style="margin:6px 0 0">Selisih kekuatan '+Math.abs(p.diff).toFixed(0)+' · skor '+sgn(p.score,0)+' · ADX '+p.adx.toFixed(0)+(w.live?'<br>Hari ini <b class="'+cl(w.chg)+'">'+sgn(w.chg,2)+'%</b>'+(w.status?' · '+esc(w.status):''):'')+(p.flags.length?'<br><span class="rej">'+(ext?'<b>Sudah jenuh, jangan dikejar.</b> ':'')+esc(p.flags.join(' · '))+'</span>':'')+'</div></div>'}).join('');
+  if(r.picks.length)h+=r.picks.map(p=>{const w=rowOf[p.sym]||{},ext=p.flags.some(f=>/Jenuh|Jauh dari EMA20/.test(f));return'<div class="card '+(p.dir>0?'buy':'sell')+'"><div class="row"><span class="sym">'+p.sym+'</span><span class="badge '+(p.dir>0?'buy':'sell')+'">'+(p.dir>0?'Condong beli':'Condong jual')+'</span></div><div class="note" style="margin:6px 0 0">Selisih kekuatan '+Math.abs(p.diff).toFixed(0)+' · skor '+sgn(p.score,0)+' · ADX '+p.adx.toFixed(0)+(w.live?'<br>Hari ini <b class="'+cl(w.chg)+'">'+sgn(w.chg,2)+'%</b>'+(w.status?' · '+esc(w.status):''):'')+(p.flags.length?'<br><span class="rej">'+(ext?'<b>Sudah jenuh, jangan dikejar.</b> ':'')+esc(p.flags.join(' · '))+'</span>':'')+'</div>'+tvBtn(p.sym,'240')+'</div>'}).join('');
   else h+='<div class="note">Belum ada pasangan dengan selisih kekuatan yang jelas dan searah dengan tren.</div>';
   h+='<div class="note">'+((j.top&&j.top.length)?'Pilihan teratas ini ('+esc(j.top.join(', '))+', dipilih dari candle harian yang sudah tutup) otomatis ikut dianalisa tiap jam di tab Analisa (diatur di Setelan, "Pasangan teratas otomatis").':'Pilihan otomatis ke tab Analisa mati atau belum ada. Atur di Setelan.')+'</div>';
   const emas=r.rows.filter(x=>x.sym==='XAU/USD')[0];
@@ -674,12 +688,14 @@ async function runMktBt(){
 // ---------- Rencana ----------
 function planCard(x){
   const h='<div class="card '+(x.dir>0?'buy':'sell')+'"><div class="row"><span class="sym">'+x.sym+' <span class="mut">('+x.name+')</span></span><span class="badge '+(x.dir>0?'buy':'sell')+'">'+(x.status==='siap'?x.type:'Tunggu')+'</span></div>';
-  if(x.status!=='siap')return h+'<div class="rej">'+esc(x.reason)+'</div><div class="note" style="margin:6px 0 0">Harga '+x.price.toFixed(x.price<10?5:3)+(x.live?' (terbaru)':' (penutupan kemarin)')+' · skor '+sgn(x.score,0)+' · ADX '+x.adx.toFixed(0)+'</div></div>';
+  if(x.status!=='siap')return h+'<div class="rej">'+esc(x.reason)+'</div><div class="note" style="margin:6px 0 0">Harga '+x.price.toFixed(x.price<10?5:3)+(x.live?' (terbaru)':' (penutupan kemarin)')+' · skor '+sgn(x.score,0)+' · ADX '+x.adx.toFixed(0)+'</div>'+tvBtn(x.sym,'240')+'</div>';
   const f=x.fmt,risky=x.riskPct>2;
   return h+'<div class="grid"><div class="mut">Pasang '+x.type+' di<b>'+f.entry+'</b></div><div class="mut">Stop loss<b class="neg">'+f.sl+'</b>'+x.slPips.toFixed(0)+' pip</div><div class="mut">Target<b class="pos">'+f.tp+'</b>'+x.tpPips.toFixed(0)+' pip</div></div>'
    +'<div class="note" style="margin:8px 0 0">Harga sekarang '+f.price+(x.live?' (terbaru)':' (penutupan kemarin)')+', jarak ke level masuk '+x.distPips.toFixed(0)+' pip · level breakout '+f.level+' · R:R bersih '+x.rr.toFixed(2)+' · lot '+x.lot.toFixed(2)+(x.approx?' (nilai pip perkiraan, cek di MT5)':'')+'</div>'
    +(risky?'<div class="badb">Risiko aktual sekitar $'+x.riskAt.toFixed(2)+' ('+x.riskPct.toFixed(0)+'% saldo). Lot minimum 0,01 sudah lebih besar dari risiko yang Anda atur ('+'target '+(S.plan?S.plan.riskPct:1)+'%). Sebaiknya jangan dipasang dengan saldo ini, atau pilih pasangan dengan stop lebih dekat.</div>':'<div class="okb">Risiko aktual sekitar $'+x.riskAt.toFixed(2)+' ('+x.riskPct.toFixed(1)+'% saldo).</div>')
-   +'<div class="chips"><span class="chip">Skor '+sgn(x.score,0)+'</span><span class="chip">ADX '+x.adx.toFixed(0)+'</span><span class="chip">ATR harian '+x.atrPips.toFixed(0)+' pip</span></div></div>';
+   +ladder({sym:x.sym,side:x.dir,entry:x.entry,sl:x.sl,tp:x.tp})
+   +'<div class="chips"><span class="chip">Skor '+sgn(x.score,0)+'</span><span class="chip">ADX '+x.adx.toFixed(0)+'</span><span class="chip">ATR harian '+x.atrPips.toFixed(0)+' pip</span></div>'
+   +enterBtn({sym:x.sym,side:x.dir,entry:x.entry,sl:x.sl,tp:x.tp,lot:x.lot})+tvBtn(x.sym,'240')+'</div>';
 }
 async function loadPlan(){
   $('#plLoad').disabled=true;$('#plMsg').textContent='Menyusun rencana…';
@@ -699,12 +715,93 @@ async function loadPlan(){
 }
 
 // ---------- Init ----------
+
+// ---------- Tangga level, TradingView, pelacak posisi ----------
+function ladder(o){
+  // kiri = bahaya (SL), kanan = tujuan (TP), titik tengah = harga masuk
+  const sd=Math.abs(o.entry-o.sl),td=Math.abs(o.tp-o.entry);if(!(sd>0&&td>0))return'';
+  const tot=sd+td,fr=Math.min(0.64,Math.max(0.36,sd/tot)),xs=14,xt=306,xe=xs+(xt-xs)*fr;
+  const f=x=>fp(o.sym,x),pip=pairMeta(o.sym,cfg).pip;
+  let cur='';
+  if(o.cur>0){
+    const m=(o.cur-o.entry)*o.side;
+    let x=m<0?xe-Math.min(1.05,-m/sd)*(xe-xs):xe+Math.min(1.05,m/td)*(xt-xe);
+    x=Math.max(5,Math.min(315,x));
+    cur='<path d="M'+x+' 22 l-6 -9 h12 z" fill="#e8eef5"/><line x1="'+x+'" y1="22" x2="'+x+'" y2="40" stroke="#e8eef5" stroke-width="1.5"/>'
+     +'<text x="'+Math.max(30,Math.min(290,x))+'" y="10" text-anchor="middle" font-size="10" fill="#e8eef5">Sekarang '+f(o.cur)+'</text>';
+  }
+  const t=(x,y,a,c,s)=>'<text x="'+x+'" y="'+y+'" text-anchor="'+a+'" font-size="10" fill="'+c+'">'+s+'</text>';
+  return '<svg class="lad" viewBox="0 0 320 78" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tangga level stop loss, masuk, target">'
+   +'<rect x="'+xs+'" y="24" width="'+(xe-xs)+'" height="12" rx="3" fill="#5a2222"/><rect x="'+xe+'" y="24" width="'+(xt-xe)+'" height="12" rx="3" fill="#1f6b3d"/>'
+   +'<line x1="'+xe+'" y1="20" x2="'+xe+'" y2="40" stroke="#8a99a8" stroke-width="1.5"/>'+cur
+   +t(xs,53,'start','#ff8a8a','SL '+f(o.sl))+t(xs,65,'start','#8a99a8','-'+(sd/pip).toFixed(0)+' pip')
+   +t(xe,53,'middle','#c9d4df','Masuk '+f(o.entry))
+   +t(xt,53,'end','#7be0a0','TP '+f(o.tp))+t(xt,65,'end','#8a99a8','+'+(td/pip).toFixed(0)+' pip')
+   +'</svg>';
+}
+function tvSym(sym){return sym==='XAU/USD'?'OANDA:XAUUSD':'FX:'+sym.replace('/','')}
+function tvBtn(sym,iv){
+  return '<div class="tvw" data-sym="'+sym+'" data-iv="'+(iv||'60')+'"><button class="btn alt" data-tv="1">Lihat grafik</button><a href="https://www.tradingview.com/chart/?symbol='+encodeURIComponent(tvSym(sym))+'" target="_blank" rel="noopener">Buka di TradingView</a></div>';
+}
+function tvToggle(w){
+  const old=w.querySelector('.tvbox'),b=w.querySelector('[data-tv]');
+  if(old){old.remove();b.textContent='Lihat grafik';return}
+  const box=document.createElement('div');box.className='tvbox';
+  const u='https://s.tradingview.com/widgetembed/?symbol='+encodeURIComponent(tvSym(w.dataset.sym))+'&interval='+w.dataset.iv+'&theme=dark&style=1&timezone=Asia%2FJakarta&locale=id&hide_side_toolbar=1&withdateranges=1&allow_symbol_change=0';
+  box.innerHTML='<iframe loading="lazy" src="'+u+'" title="Grafik TradingView"></iframe>';
+  w.appendChild(box);b.textContent='Tutup grafik';
+}
+S.rl={};let rlN=0;
+function enterBtn(o){const k='r'+(++rlN);S.rl[k]=o;return '<div class="acts"><button class="btn" data-real="'+k+'">Saya masuk (catat posisi)</button></div>'}
+async function enterReal(btn){
+  const o=S.rl[btn.dataset.real];if(!o)return;
+  btn.disabled=true;const t0=btn.textContent;btn.textContent='Mencatat...';
+  try{
+    await api('realadd',{sym:o.sym,side:o.side,entry:o.entry,sl:o.sl,tp:o.tp,lot:o.lot});
+    btn.textContent='Tercatat. Lihat di tab Posisi';S.ps=null;
+  }catch(e){btn.textContent=t0;btn.disabled=false;alert(e.message)}
+}
+function psCard(x){
+  const buy=x.side===1,st=x.st,stTx=st==='open'?'Aktif':(st==='sl'?'Kena Stop Loss':'Kena Take Profit');
+  const o={sym:x.sym,side:x.side,entry:x.entry,sl:x.sl,tp:x.tp,cur:x.cur};
+  let h='<div class="card '+(buy?'buy':'sell')+'"><div class="row"><span class="sym">'+x.sym+' <span class="mut">('+x.name+')</span></span><span class="badge '+(buy?'buy':'sell')+'">'+(buy?'BELI':'JUAL')+'</span></div>';
+  h+='<div class="row" style="margin-top:4px"><span class="pst">'+stTx+'</span><span class="mut" style="font-size:12px">lot '+(x.lot||'-')+' · '+new Date(x.t).toLocaleString('id-ID',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</span></div>';
+  h+=ladder(o);
+  if(x.cur){
+    const c=x.pips>=0?'pos':'neg';
+    h+='<div class="note" style="margin:6px 0 0">'+(st==='open'?'Harga sekarang ':'Harga akhir ')+'<b>'+x.f.cur+'</b>'+(x.curAt&&st==='open'?' ('+ago(x.curAt)+')':'')+' · hasil <b class="'+c+'">'+sgn(x.pips,1)+' pip ('+sgn(x.R,2)+'R)</b>'+(st==='open'?' · sisa ke SL '+x.toSl.toFixed(0)+' pip, ke TP '+x.toTp.toFixed(0)+' pip':'')+'</div>';
+  }
+  if(st!=='open')h+='<div class="rej">Berdasarkan harga yang terpantau, level ini tersentuh. Pastikan di Finex apakah posisi memang sudah tertutup, lalu hapus dari daftar.</div>';
+  h+=tvBtn(x.sym,'60')+'<div class="acts"><button class="btn red" data-del="'+x.id+'">Hapus dari daftar</button></div></div>';
+  return h;
+}
+async function loadReal(fresh){
+  $('#psMsg').textContent=fresh?'Mengambil harga terbaru...':'Memuat...';
+  try{
+    const r=await api('real',fresh?{fresh:'1'}:{});S.ps=r;
+    $('#psOut').innerHTML=r.items.length?r.items.map(psCard).join(''):'<div class="note">Belum ada posisi tercatat. Di tab Analisa atau Rencana, ketuk "Saya masuk" setelah Anda benar-benar membuka posisi di Finex.</div>';
+    $('#psMsg').textContent=(r.closed?'Pasar sedang tutup, harga tidak bergerak. ':'')+r.items.filter(x=>x.st==='open').length+' posisi aktif.';
+  }catch(e){$('#psMsg').textContent='';$('#psOut').innerHTML='<div class="badb">'+esc(e.message)+'</div>'}
+}
+async function delReal(id){
+  try{await api('realdel',{id:id});loadReal(false)}catch(e){alert(e.message)}
+}
+document.addEventListener('click',ev=>{
+  const t=ev.target.closest&&ev.target.closest('[data-tv],[data-real],[data-del]');if(!t)return;
+  if(t.dataset.tv)tvToggle(t.closest('.tvw'));
+  else if(t.dataset.real)enterReal(t);
+  else if(t.dataset.del&&confirm('Hapus posisi ini dari daftar pantauan?'))delReal(t.dataset.del);
+});
+$('#psLoad').onclick=()=>loadReal(false);
+$('#psFresh').onclick=()=>loadReal(true);
+setInterval(()=>{const s=$('#tab-ps');if(s&&s.classList.contains('on')&&!document.hidden)loadReal(false)},60000);
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='tab-'+b.dataset.tab));
   if(b.dataset.tab==='jr')renderJr();
   if(b.dataset.tab==='mk'&&!S.mk)loadMarket();
   if(b.dataset.tab==='pl'&&!S.plan)loadPlan();
+  if(b.dataset.tab==='ps')loadReal(false);
 });
 $('#btnScan').onclick=loadData;
 $('#mkLoad').onclick=loadMarket;
