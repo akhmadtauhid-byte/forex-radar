@@ -136,6 +136,7 @@ footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
 
 <section id="tab-jr">
 <div id="jrKpi" class="kpi"></div>
+<div class="note" id="jrDur" style="margin-top:8px"></div>
 <canvas id="jrCv"></canvas>
 <label class="mut" style="display:block;margin:12px 0"><input type="checkbox" id="autoPaper"> Buka posisi paper otomatis saat ada sinyal (dijalankan server)</label>
 <h3>Posisi terbuka</h3>
@@ -496,13 +497,25 @@ async function runCompare(){
 }
 
 // ---------- Jurnal ----------
+function dur(ms){
+  if(!(ms>=0))return '-';
+  const m=Math.round(ms/60000);
+  if(m<60)return m+' mnt';
+  const j=m/60;
+  if(j<24)return (Math.round(j*10)/10).toString().replace('.',',')+' jam';
+  const d=Math.floor(j/24),r=Math.round(j-d*24);
+  return d+' hr'+(r?' '+r+' jam':'');
+}
+function avgDur(a){const v=a.filter(t=>t.openAt&&t.closeAt&&t.closeAt>=t.openAt).map(t=>t.closeAt-t.openAt);return v.length?v.reduce((x,y)=>x+y,0)/v.length:null}
 function renderJr(){
   const cs=jr.closed,n=cs.length,w=cs.filter(t=>t.pnl>0).length,pnl=jr.pnl||0,eq=cfg.balance+pnl;
   $('#jrKpi').innerHTML=`<div class="mut">Ekuitas (USD)<b class="${cl(pnl)}">${eq.toFixed(2)}</b></div><div class="mut">P&amp;L bersih<b class="${cl(pnl)}">${pnl>=0?'+':''}${pnl.toFixed(2)}</b></div><div class="mut">Transaksi<b>${n}</b></div><div class="mut">Win rate<b>${n?(w/n*100).toFixed(0):0}%</b></div>`;
   let run=0;const curve=cs.slice().reverse().map(t=>run+=t.pnl);
   if($('#tab-jr').classList.contains('on'))drawLine($('#jrCv'),curve);
-  $('#jrOpen').innerHTML=jr.open.length?`<tr><th>Pasangan</th><th>Arah</th><th>Masuk</th><th>TP</th><th>SL</th><th>Floating</th></tr>`+jr.open.map(p=>{const d=S.data[p.sym],px=d&&d.candles&&d.src===p.src?d.candles[d.candles.length-1].c:null,fl=px?p.side*(px-p.entry)/p.entry*100:0;return`<tr><td>${p.sym}${p.auto?' ★':''}</td><td>${p.side===1?'Beli':'Jual'}</td><td>${fp(p.sym,p.entry)}</td><td>${fp(p.sym,p.tp)}</td><td>${fp(p.sym,p.sl)}</td><td class="${cl(fl)}">${px?pct(fl,3):'-'}</td></tr>`}).join(''):'<tr><td class="mut">Tidak ada posisi terbuka</td></tr>';
-  $('#jrClosed').innerHTML=n?`<tr><th>Waktu</th><th>Pasangan</th><th>Arah</th><th>Hasil</th><th>R</th><th>P&amp;L</th></tr>`+cs.slice(0,60).map(t=>`<tr><td>${jt(t.closeAt)}</td><td>${t.sym}${t.auto?' ★':''}</td><td>${t.side===1?'Beli':'Jual'}</td><td>${t.reason}</td><td class="${cl(t.R)}">${t.R.toFixed(2)}</td><td class="${cl(t.pnl)}">${t.pnl.toFixed(2)}</td></tr>`).join(''):'<tr><td class="mut">Belum ada riwayat</td></tr>';
+  {const win=cs.filter(t=>t.pnl>0),los=cs.filter(t=>t.pnl<=0),aw=avgDur(win),al=avgDur(los),aa=avgDur(cs);
+   $('#jrDur').innerHTML=n?'Rata-rata lama posisi: <b>'+dur(aa)+'</b> · sampai untung <b class="pos">'+(aw==null?'-':dur(aw))+'</b> ('+win.length+' transaksi) · sampai rugi <b class="neg">'+(al==null?'-':dur(al))+'</b> ('+los.length+' transaksi)':'Rata-rata lama posisi akan muncul setelah ada transaksi yang selesai.'}
+  $('#jrOpen').innerHTML=jr.open.length?`<tr><th>Pasangan</th><th>Arah</th><th>Masuk</th><th>TP</th><th>SL</th><th>Lama</th><th>Floating</th></tr>`+jr.open.map(p=>{const d=S.data[p.sym],px=d&&d.candles&&d.src===p.src?d.candles[d.candles.length-1].c:null,fl=px?p.side*(px-p.entry)/p.entry*100:0;return`<tr><td>${p.sym}${p.auto?' ★':''}</td><td>${p.side===1?'Beli':'Jual'}</td><td>${fp(p.sym,p.entry)}</td><td>${fp(p.sym,p.tp)}</td><td>${fp(p.sym,p.sl)}</td><td>${p.openAt?dur(Date.now()-p.openAt):'-'}</td><td class="${cl(fl)}">${px?pct(fl,3):'-'}</td></tr>`}).join(''):'<tr><td class="mut">Tidak ada posisi terbuka</td></tr>';
+  $('#jrClosed').innerHTML=n?`<tr><th>Waktu</th><th>Pasangan</th><th>Arah</th><th>Hasil</th><th>Lama</th><th>R</th><th>P&amp;L</th></tr>`+cs.slice(0,60).map(t=>`<tr><td>${jt(t.closeAt)}</td><td>${t.sym}${t.auto?' ★':''}</td><td>${t.side===1?'Beli':'Jual'}</td><td>${t.reason}</td><td>${t.openAt?dur(t.closeAt-t.openAt):'-'}</td><td class="${cl(t.R)}">${t.R.toFixed(2)}</td><td class="${cl(t.pnl)}">${t.pnl.toFixed(2)}</td></tr>`).join(''):'<tr><td class="mut">Belum ada riwayat</td></tr>';
 }
 function csv(){
   const h='waktu_tutup,pasangan,arah,masuk,keluar,hasil,bersih_persen,R,pnl_usd\n';
@@ -778,7 +791,7 @@ function psCard(x){
   const buy=x.side===1,st=x.st,stTx=st==='open'?'Aktif':(st==='sl'?'Kena Stop Loss':'Kena Take Profit');
   const o={sym:x.sym,side:x.side,entry:x.entry,sl:x.sl,tp:x.tp,cur:x.cur};
   let h='<div class="card '+(buy?'buy':'sell')+'"><div class="row"><span class="sym">'+x.sym+' <span class="mut">('+x.name+')</span></span><span class="badge '+(buy?'buy':'sell')+'">'+(buy?'BELI':'JUAL')+'</span></div>';
-  h+='<div class="row" style="margin-top:4px"><span class="pst">'+stTx+'</span><span class="mut" style="font-size:12px">lot '+(x.lot||'-')+' · '+new Date(x.t).toLocaleString('id-ID',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</span></div>';
+  h+='<div class="row" style="margin-top:4px"><span class="pst">'+stTx+'</span><span class="mut" style="font-size:12px">lama '+dur((x.closeAt||Date.now())-x.t)+' · lot '+(x.lot||'-')+' · '+new Date(x.t).toLocaleString('id-ID',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</span></div>';
   h+=ladder(o);
   if(x.cur){
     const c=x.pips>=0?'pos':'neg';
@@ -793,7 +806,10 @@ async function loadReal(fresh){
   try{
     const r=await api('real',fresh?{fresh:'1'}:{});S.ps=r;
     $('#psOut').innerHTML=r.items.length?r.items.map(psCard).join(''):'<div class="note">Belum ada posisi tercatat. Di tab Analisa atau Rencana, ketuk "Saya masuk" setelah Anda benar-benar membuka posisi di Finex.</div>';
-    $('#psMsg').textContent=(r.closed?'Pasar sedang tutup, harga tidak bergerak. ':'')+r.items.filter(x=>x.st==='open').length+' posisi aktif.';
+    {const dn=r.items.filter(x=>x.st!=='open').map(x=>({openAt:x.t,closeAt:x.closeAt,pnl:x.st==='tp'?1:-1}));
+     const aw=avgDur(dn.filter(t=>t.pnl>0)),al=avgDur(dn.filter(t=>t.pnl<0));
+     S.psDur=dn.length?' Posisi selesai: '+dn.length+', rata-rata lama sampai TP '+(aw==null?'-':dur(aw))+', sampai SL '+(al==null?'-':dur(al))+'.':''}
+    $('#psMsg').textContent=(r.closed?'Pasar sedang tutup, harga tidak bergerak. ':'')+r.items.filter(x=>x.st==='open').length+' posisi aktif.'+(S.psDur||'');
   }catch(e){$('#psMsg').textContent='';$('#psOut').innerHTML='<div class="badb">'+esc(e.message)+'</div>'}
 }
 async function delReal(id){
