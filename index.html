@@ -802,7 +802,10 @@ function finexUrl(ask){
     const v=prompt('Ketik atau tempel alamat Finex, misalnya finex.co.id (awalan https:// otomatis). Kosongkan untuk membatalkan.',u.replace(/^https?:\/\//i,''));
     if(!v||!v.trim())return '';
     let t=v.trim();
+    t=t.replace(/^(https?)(:\/\/|:\/|\/\/|:)+/i,'$1://');
     while(/^https?:\/\/https?:\/\//i.test(t))t=t.replace(/^https?:\/\//i,'');
+    if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(t))t='https://'+t;
+    try{new URL(t)}catch(e){alert('Alamat tidak valid');return ''}
     if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(t))t='https://'+t;
     u=t;try{localStorage.setItem(FXK,u)}catch(e){}
   }
