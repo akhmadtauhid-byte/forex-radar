@@ -117,7 +117,7 @@ footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
 <section id="tab-ps">
 <div class="bar"><button class="btn" id="psLoad">Muat posisi</button><button class="btn alt" id="psFresh">Perbarui harga</button></div>
 <div class="mut" id="psMsg"></div>
-<div class="note">Posisi yang Anda catat lewat tombol "Saya masuk" di kartu sinyal atau rencana. Server memantau harganya dan mengirim Telegram bila mendekati Stop Loss atau Take Profit, menyentuh keduanya, atau sudah untung 1R. Harga diperbarui sekitar tiap 15 sampai 30 menit untuk menghemat kredit, jadi untuk harga detik ini tetap lihat Finex. Pencatatan ini hanya pemantau, tidak mengirim order ke Finex.</div>
+<div class="note">Posisi yang Anda catat lewat tombol "Saya masuk" di kartu sinyal atau rencana. Server memantau harganya dan mengirim Telegram bila mendekati Stop Loss atau Take Profit, menyentuh keduanya, atau sudah untung 1R. Harga diperbarui sekitar tiap 5 menit (10 sampai 15 menit bila posisi banyak, untuk menghemat kredit). Selisih kecil dengan Finex tetap wajar, untuk harga detik ini lihat Finex. Pencatatan ini hanya pemantau, tidak mengirim order ke Finex.</div>
 <div id="psOut"></div>
 </section>
 
@@ -310,7 +310,7 @@ function lotFor(sym,price,slPips,riskUSD,rates){
 const API_URL='https://script.google.com/macros/s/AKfycbwpcTcOroRq8A3oywj1V99YIhX0YWKR-D5LlYwW_8N462U0DEDPaz8PhASn1dKVowmLXg/exec';
 const $=s=>document.querySelector(s);
 const LSK='forexradar.cfg.v2',LSC='forexradar.code.v2',LSB='forexradar.bt.v1';
-const DEF={tf:'1h',mode:'pullback',sides:'bo1AscXDwGYA9RMuDbmoBPwqdqVOvJsGyqKoHWVVC8230Qth',pairs:'EUR/USD,GBP/USD,USD/JPY,AUD/USD,USD/CAD,USD/CHF,XAU/USD',spreads:'',slip:0.3,tpAtr:2,slAtr:1,minScore:60,minRR:1,maxBars:24,cooldown:30,balance:100,risk:1,autoPaper:false,autoTop:3,digest:'on',moveAlert:'on',moveAtr:0.8};
+const DEF={tf:'1h',mode:'pullback',sides:'both',pairs:'EUR/USD,GBP/USD,USD/JPY,AUD/USD,USD/CAD,USD/CHF,XAU/USD',spreads:'',slip:0.3,tpAtr:2,slAtr:1,minScore:60,minRR:1,maxBars:24,cooldown:30,balance:100,risk:1,autoPaper:false,autoTop:3,digest:'on',moveAlert:'on',moveAtr:0.8};
 const MODES={pullback:'Pantulan EMA21',momentum:'Momentum',donchian:'Breakout 55 candle'};
 const FIELDS=[
 ['code','Kode akses (disimpan di perangkat ini)','pw'],
@@ -794,7 +794,7 @@ document.addEventListener('click',ev=>{
 });
 $('#psLoad').onclick=()=>loadReal(false);
 $('#psFresh').onclick=()=>loadReal(true);
-setInterval(()=>{const s=$('#tab-ps');if(s&&s.classList.contains('on')&&!document.hidden)loadReal(false)},60000);
+setInterval(()=>{const s=$('#tab-ps');if(s&&s.classList.contains('on')&&!document.hidden)loadReal(true)},90000);
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='tab-'+b.dataset.tab));
