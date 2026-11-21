@@ -400,7 +400,7 @@ function card(sym){
 ${pv?`<div class="lv"><span>R2 <b>${fp(sym,pv.R2)}</b></span><span>R1 <b>${fp(sym,pv.R1)}</b></span><span>Pivot <b>${fp(sym,pv.P)}</b></span><span>S1 <b>${fp(sym,pv.S1)}</b></span><span>S2 <b>${fp(sym,pv.S2)}</b></span><span>${a.sr.res?'Resistance dekat <b>'+fp(sym,a.sr.res)+'</b>':'&nbsp;'}</span><span>${a.sr.sup?'Support dekat <b>'+fp(sym,a.sr.sup)+'</b>':'&nbsp;'}</span></div>`:''}
 ${fb?`<div class="chips"><span class="chip">Fibonacci (${fb.up?'ayunan naik':'ayunan turun'})</span>${fb.levels.map(x=>`<span class="chip">${(x.r*100).toFixed(1)}% ${fp(sym,x.v)}</span>`).join('')}</div>`:''}
 ${sigBlk}${costWarn}
-${tvBtn(sym,'60')}
+${tvBtn(sym,'60')}${aiBtn(sym)}
 </div>`;
 }
 function renderCards(){$('#cards').innerHTML=pairs().map(card).join('')||'<div class="note">Belum ada pasangan. Isi di Setelan.</div>'}
@@ -622,7 +622,7 @@ function liveHtml(j){
   if(!L.length){return h+'<div class="note">Harga terbaru belum ada. Tekan "Perbarui harga" (sekitar 4 menit untuk semua pasangan), atau tunggu server memperbaruinya otomatis tiap 3 jam saat pasar buka.'+(j.closed?' Pasar sedang tutup (akhir pekan).':'')+'</div>'+rulesHtml(th)}
   const up=L.filter(x=>x.chg>0).slice(0,5),dn=L.filter(x=>x.chg<0).slice(-5).reverse();
   const jn=x=>(x.flags||[]).filter(f=>/Jenuh|Jauh dari EMA20/.test(f));
-  const card=x=>{const j=jn(x);return'<div class="card '+(x.chg>0?'buy':'sell')+'"><div class="row"><span class="sym">'+x.sym+'</span><span class="'+cl(x.chg)+'"><b>'+sgn(x.chg,2)+'%</b> <span class="mut">('+Math.abs(x.ratio).toFixed(1)+'x)</span></span></div><div class="chips"><span class="chip '+(x.chg>0?'up':'dn')+'">'+esc(x.tag)+'</span>'+(Math.abs(x.ratio)>=th?'<span class="chip">Lewat ambang alert</span>':'')+'</div>'+(j.length?'<div class="rej"><b>Sudah jenuh, jangan dikejar:</b> '+esc(j.join(' · '))+'. Rawan berbalik arah.</div>':'')+'<div class="note" style="margin:6px 0 0">'+esc(x.note)+'</div>'+tvBtn(x.sym,'60')+'</div>'};
+  const card=x=>{const j=jn(x);return'<div class="card '+(x.chg>0?'buy':'sell')+'"><div class="row"><span class="sym">'+x.sym+'</span><span class="'+cl(x.chg)+'"><b>'+sgn(x.chg,2)+'%</b> <span class="mut">('+Math.abs(x.ratio).toFixed(1)+'x)</span></span></div><div class="chips"><span class="chip '+(x.chg>0?'up':'dn')+'">'+esc(x.tag)+'</span>'+(Math.abs(x.ratio)>=th?'<span class="chip">Lewat ambang alert</span>':'')+'</div>'+(j.length?'<div class="rej"><b>Sudah jenuh, jangan dikejar:</b> '+esc(j.join(' · '))+'. Rawan berbalik arah.</div>':'')+'<div class="note" style="margin:6px 0 0">'+esc(x.note)+'</div>'+tvBtn(x.sym,'60')+aiBtn(x.sym)+'</div>'};
   h+='<div class="note">Dibandingkan penutupan harian kemarin. Harga diperbarui '+ago(j.liveAt)+'. Angka dalam kurung = kelipatan rata-rata gerak harian (ATR).'+(j.closed?' Pasar sedang tutup.':'')+'</div>';
   h+='<div class="note"><b>Sedang naik</b></div>'+(up.length?up.map(card).join(''):'<div class="note">Belum ada yang naik.</div>');
   h+='<div class="note"><b>Sedang turun</b></div>'+(dn.length?dn.map(card).join(''):'<div class="note">Belum ada yang turun.</div>');
@@ -646,7 +646,7 @@ function renderMarket(){
   }).join('')+'</div>';
   h+='<h3>Kandidat perhatian</h3>';
   const rowOf={};r.rows.forEach(x=>rowOf[x.sym]=x);
-  if(r.picks.length)h+=r.picks.map(p=>{const w=rowOf[p.sym]||{},ext=p.flags.some(f=>/Jenuh|Jauh dari EMA20/.test(f));return'<div class="card '+(p.dir>0?'buy':'sell')+'"><div class="row"><span class="sym">'+p.sym+'</span><span class="badge '+(p.dir>0?'buy':'sell')+'">'+(p.dir>0?'Condong beli':'Condong jual')+'</span></div><div class="note" style="margin:6px 0 0">Selisih kekuatan '+Math.abs(p.diff).toFixed(0)+' · skor '+sgn(p.score,0)+' · ADX '+p.adx.toFixed(0)+(w.live?'<br>Hari ini <b class="'+cl(w.chg)+'">'+sgn(w.chg,2)+'%</b>'+(w.status?' · '+esc(w.status):''):'')+(p.flags.length?'<br><span class="rej">'+(ext?'<b>Sudah jenuh, jangan dikejar.</b> ':'')+esc(p.flags.join(' · '))+'</span>':'')+'</div>'+tvBtn(p.sym,'240')+'</div>'}).join('');
+  if(r.picks.length)h+=r.picks.map(p=>{const w=rowOf[p.sym]||{},ext=p.flags.some(f=>/Jenuh|Jauh dari EMA20/.test(f));return'<div class="card '+(p.dir>0?'buy':'sell')+'"><div class="row"><span class="sym">'+p.sym+'</span><span class="badge '+(p.dir>0?'buy':'sell')+'">'+(p.dir>0?'Condong beli':'Condong jual')+'</span></div><div class="note" style="margin:6px 0 0">Selisih kekuatan '+Math.abs(p.diff).toFixed(0)+' · skor '+sgn(p.score,0)+' · ADX '+p.adx.toFixed(0)+(w.live?'<br>Hari ini <b class="'+cl(w.chg)+'">'+sgn(w.chg,2)+'%</b>'+(w.status?' · '+esc(w.status):''):'')+(p.flags.length?'<br><span class="rej">'+(ext?'<b>Sudah jenuh, jangan dikejar.</b> ':'')+esc(p.flags.join(' · '))+'</span>':'')+'</div>'+tvBtn(p.sym,'240')+aiBtn(p.sym)+'</div>'}).join('');
   else h+='<div class="note">Belum ada pasangan dengan selisih kekuatan yang jelas dan searah dengan tren.</div>';
   h+='<div class="note">'+((j.top&&j.top.length)?'Pilihan teratas ini ('+esc(j.top.join(', '))+', dipilih dari candle harian yang sudah tutup) otomatis ikut dianalisa tiap jam di tab Analisa (diatur di Setelan, "Pasangan teratas otomatis").':'Pilihan otomatis ke tab Analisa mati atau belum ada. Atur di Setelan.')+'</div>';
   const emas=r.rows.filter(x=>x.sym==='XAU/USD')[0];
@@ -710,7 +710,7 @@ function planCard(x){
    +(risky?'<div class="badb">Risiko aktual sekitar $'+x.riskAt.toFixed(2)+' ('+x.riskPct.toFixed(0)+'% saldo). Lot minimum 0,01 sudah lebih besar dari risiko yang Anda atur ('+'target '+(S.plan?S.plan.riskPct:1)+'%). Sebaiknya jangan dipasang dengan saldo ini, atau pilih pasangan dengan stop lebih dekat.</div>':'<div class="okb">Risiko aktual sekitar $'+x.riskAt.toFixed(2)+' ('+x.riskPct.toFixed(1)+'% saldo).</div>')
    +ladder({sym:x.sym,side:x.dir,entry:x.entry,sl:x.sl,tp:x.tp})
    +'<div class="chips"><span class="chip">Skor '+sgn(x.score,0)+'</span><span class="chip">ADX '+x.adx.toFixed(0)+'</span><span class="chip">ATR harian '+x.atrPips.toFixed(0)+' pip</span></div>'
-   +enterBtn({sym:x.sym,side:x.dir,entry:x.entry,sl:x.sl,tp:x.tp,lot:x.lot})+tvBtn(x.sym,'240')+'</div>';
+   +enterBtn({sym:x.sym,side:x.dir,entry:x.entry,sl:x.sl,tp:x.tp,lot:x.lot})+tvBtn(x.sym,'240')+aiBtn(x.sym)+'</div>';
 }
 async function loadPlan(){
   $('#plLoad').disabled=true;$('#plMsg').textContent='Menyusun rencana…';
@@ -732,6 +732,19 @@ async function loadPlan(){
 // ---------- Init ----------
 
 // ---------- Tangga level, TradingView, pelacak posisi ----------
+
+S.ai={};
+function aiBtn(sym){const c=S.ai[sym];return '<div class="aiw" data-sym="'+sym+'"><button class="btn alt" data-ai="1">'+(c?'Analisa ulang':'Analisa AI')+'</button><div class="aiout">'+(c||'')+'</div></div>'}
+async function aiRun(btn){
+  const w=btn.closest('.aiw'),o=w.querySelector('.aiout');
+  btn.disabled=true;const t0=btn.textContent;btn.textContent='AI sedang menganalisa...';o.innerHTML='';
+  try{
+    const r=await api('ai',{sym:w.dataset.sym});
+    o.innerHTML='<div class="note" style="white-space:pre-wrap;margin-top:8px">'+esc(r.text)+'</div><div class="mut" style="font-size:11px;margin-top:4px">Dibuat AI dari data harga terakhir ('+new Date(r.at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})+'). Bukan prediksi pasti dan bukan saran investasi. Sisa jatah hari ini: '+r.left+'.</div>';
+    btn.textContent='Analisa ulang';S.ai[w.dataset.sym]=o.innerHTML;
+  }catch(e){o.innerHTML='<div class="badb">'+esc(e.message)+'</div>';btn.textContent=t0}
+  setTimeout(()=>{btn.disabled=false},8000);
+}
 function ladder(o){
   // kiri = bahaya (SL), kanan = tujuan (TP), titik tengah = harga masuk
   const sd=Math.abs(o.entry-o.sl),td=Math.abs(o.tp-o.entry);if(!(sd>0&&td>0))return'';
@@ -798,7 +811,7 @@ function psCard(x){
     h+='<div class="note" style="margin:6px 0 0">'+(st==='open'?'Harga sekarang ':'Harga akhir ')+'<b>'+x.f.cur+'</b>'+(x.curAt&&st==='open'?' ('+ago(x.curAt)+')':'')+' · hasil <b class="'+c+'">'+sgn(x.pips,1)+' pip ('+sgn(x.R,2)+'R)</b>'+(st==='open'?' · sisa ke SL '+x.toSl.toFixed(0)+' pip, ke TP '+x.toTp.toFixed(0)+' pip':'')+'</div>';
   }
   if(st!=='open')h+='<div class="rej">Berdasarkan harga yang terpantau, level ini tersentuh. Pastikan di Finex apakah posisi memang sudah tertutup, lalu hapus dari daftar.</div>';
-  h+=(st==='open'?cpRow({sym:x.sym,entry:x.entry,sl:x.sl,tp:x.tp,lot:x.lot}):'')+tvBtn(x.sym,'60')+'<div class="acts"><button class="btn red" data-del="'+x.id+'">Hapus dari daftar</button></div></div>';
+  h+=aiBtn(x.sym)+(st==='open'?cpRow({sym:x.sym,entry:x.entry,sl:x.sl,tp:x.tp,lot:x.lot}):'')+tvBtn(x.sym,'60')+'<div class="acts"><button class="btn red" data-del="'+x.id+'">Hapus dari daftar</button></div></div>';
   return h;
 }
 async function loadReal(fresh){
@@ -816,8 +829,9 @@ async function delReal(id){
   try{await api('realdel',{id:id});loadReal(false)}catch(e){alert(e.message)}
 }
 document.addEventListener('click',ev=>{
-  const t=ev.target.closest&&ev.target.closest('[data-tv],[data-real],[data-del],[data-cp]');if(!t)return;
-  if(t.dataset.cp)copyTxt(t);
+  const t=ev.target.closest&&ev.target.closest('[data-tv],[data-real],[data-del],[data-cp],[data-ai]');if(!t)return;
+  if(t.dataset.ai)aiRun(t);
+  else if(t.dataset.cp)copyTxt(t);
   else if(t.dataset.tv)tvToggle(t.closest('.tvw'));
   else if(t.dataset.real)enterReal(t);
   else if(t.dataset.del&&confirm('Hapus posisi ini dari daftar pantauan?'))delReal(t.dataset.del);
