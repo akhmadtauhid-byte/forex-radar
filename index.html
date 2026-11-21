@@ -753,8 +753,19 @@ function tvToggle(w){
   box.innerHTML='<iframe loading="lazy" src="'+u+'" title="Grafik TradingView"></iframe>';
   w.appendChild(box);b.textContent='Tutup grafik';
 }
+function cpRow(o){
+  const f=x=>fp(o.sym,x),b=(l,v)=>'<button class="btn alt" data-cp="'+v+'">'+l+' '+v+'</button>';
+  return '<div class="acts">'+b('Salin Masuk',f(o.entry))+b('Salin SL',f(o.sl))+b('Salin TP',f(o.tp))+(o.lot?b('Salin Lot',(+o.lot).toFixed(2)):'')+'</div>';
+}
+async function copyTxt(btn){
+  const v=btn.dataset.cp;let ok=false;
+  try{await navigator.clipboard.writeText(v);ok=true}catch(e){}
+  if(!ok){try{const t=document.createElement('textarea');t.value=v;t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();ok=document.execCommand('copy');t.remove()}catch(e){}}
+  const old=btn.textContent;btn.textContent=ok?'Tersalin: '+v:'Gagal menyalin, salin manual: '+v;
+  setTimeout(()=>{btn.textContent=old},2500);
+}
 S.rl={};let rlN=0;
-function enterBtn(o){const k='r'+(++rlN);S.rl[k]=o;return '<div class="acts"><button class="btn" data-real="'+k+'">Saya masuk (catat posisi)</button></div>'}
+function enterBtn(o){const k='r'+(++rlN);S.rl[k]=o;return cpRow(o)+'<div class="acts"><button class="btn" data-real="'+k+'">Saya masuk (catat posisi)</button></div>'}
 async function enterReal(btn){
   const o=S.rl[btn.dataset.real];if(!o)return;
   btn.disabled=true;const t0=btn.textContent;btn.textContent='Mencatat...';
@@ -774,7 +785,7 @@ function psCard(x){
     h+='<div class="note" style="margin:6px 0 0">'+(st==='open'?'Harga sekarang ':'Harga akhir ')+'<b>'+x.f.cur+'</b>'+(x.curAt&&st==='open'?' ('+ago(x.curAt)+')':'')+' · hasil <b class="'+c+'">'+sgn(x.pips,1)+' pip ('+sgn(x.R,2)+'R)</b>'+(st==='open'?' · sisa ke SL '+x.toSl.toFixed(0)+' pip, ke TP '+x.toTp.toFixed(0)+' pip':'')+'</div>';
   }
   if(st!=='open')h+='<div class="rej">Berdasarkan harga yang terpantau, level ini tersentuh. Pastikan di Finex apakah posisi memang sudah tertutup, lalu hapus dari daftar.</div>';
-  h+=tvBtn(x.sym,'60')+'<div class="acts"><button class="btn red" data-del="'+x.id+'">Hapus dari daftar</button></div></div>';
+  h+=(st==='open'?cpRow({sym:x.sym,entry:x.entry,sl:x.sl,tp:x.tp,lot:x.lot}):'')+tvBtn(x.sym,'60')+'<div class="acts"><button class="btn red" data-del="'+x.id+'">Hapus dari daftar</button></div></div>';
   return h;
 }
 async function loadReal(fresh){
@@ -789,8 +800,9 @@ async function delReal(id){
   try{await api('realdel',{id:id});loadReal(false)}catch(e){alert(e.message)}
 }
 document.addEventListener('click',ev=>{
-  const t=ev.target.closest&&ev.target.closest('[data-tv],[data-real],[data-del]');if(!t)return;
-  if(t.dataset.tv)tvToggle(t.closest('.tvw'));
+  const t=ev.target.closest&&ev.target.closest('[data-tv],[data-real],[data-del],[data-cp]');if(!t)return;
+  if(t.dataset.cp)copyTxt(t);
+  else if(t.dataset.tv)tvToggle(t.closest('.tvw'));
   else if(t.dataset.real)enterReal(t);
   else if(t.dataset.del&&confirm('Hapus posisi ini dari daftar pantauan?'))delReal(t.dataset.del);
 });
