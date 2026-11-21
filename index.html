@@ -799,12 +799,16 @@ const FXK='forexradar.finexUrl';
 function finexUrl(ask){
   let u='';try{u=localStorage.getItem(FXK)||''}catch(e){}
   if(!u||ask){
-    const v=prompt('Tempel tautan untuk membuka Finex (alamat web trading Finex atau tautan aplikasinya). Kosongkan untuk membatalkan.',u||'https://');
-    if(!v||!/^[a-z][a-z0-9+.-]*:\/\//i.test(v.trim())||v.trim()==='https://')return '';
-    u=v.trim();try{localStorage.setItem(FXK,u)}catch(e){}
+    const v=prompt('Ketik atau tempel alamat Finex, misalnya finex.co.id (awalan https:// otomatis). Kosongkan untuk membatalkan.',u.replace(/^https?:\/\//i,''));
+    if(!v||!v.trim())return '';
+    let t=v.trim();
+    while(/^https?:\/\/https?:\/\//i.test(t))t=t.replace(/^https?:\/\//i,'');
+    if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(t))t='https://'+t;
+    u=t;try{localStorage.setItem(FXK,u)}catch(e){}
   }
   return u;
 }
+if(!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)){const m=$('#openMt5');m.href='https://web.metatrader.app/';m.target='_blank';m.rel='noopener';m.textContent='Buka MetaTrader 5 (web)'}
 $('#openFinex').onclick=()=>{const u=finexUrl(false);if(u)location.href=u};
 $('#finexEdit').onclick=ev=>{ev.preventDefault();finexUrl(true)};
 $('#psLoad').onclick=()=>loadReal(false);
