@@ -72,6 +72,8 @@ h3{margin:16px 0 6px;font-size:14px}
 .kpi div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 .kpi b{display:block;font-size:16px}
 footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
+.mch{width:100%;height:auto;display:block;margin:8px 0 2px}
+.mcap{font-size:11px;color:#8a99a8;margin-bottom:6px}
 </style>
 </head>
 <body>
@@ -315,7 +317,7 @@ function lotFor(sym,price,slPips,riskUSD,rates){
 const API_URL='https://script.google.com/macros/s/AKfycbwpcTcOroRq8A3oywj1V99YIhX0YWKR-D5LlYwW_8N462U0DEDPaz8PhASn1dKVowmLXg/exec';
 const $=s=>document.querySelector(s);
 const LSK='forexradar.cfg.v2',LSC='forexradar.code.v2',LSB='forexradar.bt.v1';
-const DEF={tf:'1h',mode:'pullback',sides:'both',pairs:'EUR/USD,GBP/USD,USD/JPY,AUD/USD,USD/CAD,USD/CHF,XAU/USD',spreads:'',slip:0.3,tpAtr:2,slAtr:1,minScore:60,minRR:1,maxBars:24,cooldown:30,balance:100,risk:1,autoPaper:false,autoTop:3,digest:'on',moveAlert:'on',moveAtr:0.8,fastOn:'off',fastPairs:'EUR/USD,GBP/USD',fastFrom:6,fastTo:22};
+const DEF={tf:'1h',mode:'pullback',sides:'both',pairs:'EUR/USD,GBP/USD,USD/JPY,AUD/USD,USD/CAD,USD/CHF,XAU/USD',spreads:'',slip:0.3,tpAtr:2,slAtr:1,minScore:60,minRR:1,maxBars:24,cooldown:30,balance:100,risk:1,autoPaper:false,autoTop:3,digest:'on',moveAlert:'on',moveAtr:0.8,fastOn:'off',fastPairs:'EUR/USD,GBP/USD',fastFrom:7,fastTo:21};
 const MODES={pullback:'Pantulan EMA21',momentum:'Momentum',donchian:'Breakout 55 candle'};
 const FIELDS=[
 ['code','Kode akses (disimpan di perangkat ini)','pw'],
@@ -389,6 +391,55 @@ function analyze(sym){
   S.an[sym]={price,tBase,htf,piv,fib,sr,rsi:r,atrPips:a/meta.pip,atrPct:a/price*100,biasLb,bias,sig:best,lot,meta,src:d.src,candleT:closed[i].t,lastT:cs[cs.length-1].t,cost:costPct(meta,cfg,price)};
 }
 function trendChip(lb,t){return`<span class="chip ${t>0?'up':(t<0?'dn':'')}">${lb}: ${t>0?'naik':(t<0?'turun':'datar')}</span>`}
+
+// ---------- Grafik mini (candle + EMA + level) ----------
+function miniChart(sym,o){
+  const d=S.data[sym];if(!d||!d.candles||d.candles.length<30)return'';
+  const all=d.candles,N=Math.min(60,all.length),cs=all.slice(-N);
+  const cl=all.map(x=>x.c),e21=ema(cl,21).slice(-N),e50=ema(cl,50).slice(-N);
+  let hi=-Infinity,lo=Infinity;
+  cs.forEach(x=>{if(x.h>hi)hi=x.h;if(x.l<lo)lo=x.l});
+  if(o)[o.entry,o.sl,o.tp].forEach(v=>{if(v>hi)hi=v;if(v<lo)lo=v});
+  const pad=(hi-lo)*0.06||1e-4;hi+=pad;lo-=pad;
+  const W=320,H=200,L=4,R=76,T=6,B=6,pw=W-L-R,ph=H-T-B;
+  const X=i=>L+(i+0.5)*pw/N,Y=v=>T+(hi-v)/(hi-lo)*ph,bw=Math.max(1.5,pw/N*0.62),f=v=>fp(sym,v);
+  let g='';
+  const last=cs[N-1].c;
+  if(o){
+    const si=cs.findIndex(x=>x.t===o.t),x0=si>=0?X(si):L,x1=L+pw;
+    const ye=Y(o.entry),ys=Y(o.sl),yt=Y(o.tp);
+    g+='<rect x="'+x0+'" y="'+Math.min(ye,ys)+'" width="'+(x1-x0)+'" height="'+Math.abs(ys-ye)+'" fill="#ff6b6b" opacity="0.14"/>';
+    g+='<rect x="'+x0+'" y="'+Math.min(ye,yt)+'" width="'+(x1-x0)+'" height="'+Math.abs(yt-ye)+'" fill="#3ccf7a" opacity="0.14"/>';
+  }
+  cs.forEach((x,i)=>{
+    const up=x.c>=x.o,col=up?'#3ccf7a':'#ff6b6b',xx=X(i),yo=Y(x.o),yc=Y(x.c);
+    g+='<line x1="'+xx+'" y1="'+Y(x.h)+'" x2="'+xx+'" y2="'+Y(x.l)+'" stroke="'+col+'" stroke-width="1"/>'
+      +'<rect x="'+(xx-bw/2)+'" y="'+Math.min(yo,yc)+'" width="'+bw+'" height="'+Math.max(1,Math.abs(yc-yo))+'" fill="'+col+'"/>';
+  });
+  const pl=(arr,col)=>'<polyline fill="none" stroke="'+col+'" stroke-width="1.4" points="'+arr.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')+'"/>';
+  g+=pl(e50,'#5aa9ff')+pl(e21,'#ffa94d');
+  const lv=[{v:last,t:'Kini '+f(last),c:'#e8eef5',d:'3 3'}];
+  if(o){
+    lv.push({v:o.tp,t:'TP '+f(o.tp),c:'#7be0a0'},{v:o.entry,t:'Masuk '+f(o.entry),c:'#c9d4df',d:'5 3'},{v:o.sl,t:'SL '+f(o.sl),c:'#ff8a8a'});
+    const si=cs.findIndex(x=>x.t===o.t);
+    if(si>=0){
+      const bx=X(si),buy=o.side===1,by=buy?Y(cs[si].l)+9:Y(cs[si].h)-9;
+      g+='<path d="M'+bx+' '+by+(buy?' l-5 8 h10 z':' l-5 -8 h10 z')+'" fill="'+(buy?'#3ccf7a':'#ff6b6b')+'"/>';
+    }
+  }
+  lv.forEach(a=>{a.y=Y(a.v)});
+  lv.sort((a,b)=>a.y-b.y);
+  const lab=lv.map(a=>({a:a,ty:a.y}));
+  for(let i=1;i<lab.length;i++)if(lab[i].ty-lab[i-1].ty<11)lab[i].ty=lab[i-1].ty+11;
+  lab.forEach(z=>{
+    const a=z.a;
+    g+='<line x1="'+L+'" y1="'+a.y+'" x2="'+(L+pw)+'" y2="'+a.y+'" stroke="'+a.c+'" stroke-width="1" '+(a.d?'stroke-dasharray="'+a.d+'" ':'')+'opacity="0.9"/>'
+      +'<text x="'+(L+pw+4)+'" y="'+(z.ty+3)+'" font-size="9.5" fill="'+a.c+'">'+a.t+'</text>';
+  });
+  const tfn=({'15min':'15 menit','1h':'1 jam','4h':'4 jam'})[d.tf||cfg.tf]||(d.tf||cfg.tf);
+  return '<svg class="mch" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Grafik mini candle dengan EMA dan level">'+g+'</svg>'
+    +'<div class="mcap">Candle '+tfn+' (60 terakhir). Oranye = EMA 21, biru = EMA 50. '+(o?'Area merah = risiko, hijau = target. Segitiga = candle sinyal.':'')+'</div>';
+}
 function card(sym){
   const d=S.data[sym],a=S.an[sym];
   if(!d)return`<div class="card"><b>${sym}</b> <span class="mut">belum dimuat</span></div>`;
@@ -405,7 +456,7 @@ function card(sym){
 <div class="chips">${S.extra.indexOf(sym)>=0?'<span class="chip up">Pilihan otomatis dari tab Pasar</span>':''}${trendChip(cfg.tf==='15min'?'15m':cfg.tf,a.tBase)}${a.htf.map(x=>trendChip(x.lb,x.t)).join('')}<span class="chip">RSI ${a.rsi.toFixed(0)}</span><span class="chip">ATR ${a.atrPips.toFixed(0)} pip</span></div>
 ${pv?`<div class="lv"><span>R2 <b>${fp(sym,pv.R2)}</b></span><span>R1 <b>${fp(sym,pv.R1)}</b></span><span>Pivot <b>${fp(sym,pv.P)}</b></span><span>S1 <b>${fp(sym,pv.S1)}</b></span><span>S2 <b>${fp(sym,pv.S2)}</b></span><span>${a.sr.res?'Resistance dekat <b>'+fp(sym,a.sr.res)+'</b>':'&nbsp;'}</span><span>${a.sr.sup?'Support dekat <b>'+fp(sym,a.sr.sup)+'</b>':'&nbsp;'}</span></div>`:''}
 ${fb?`<div class="chips"><span class="chip">Fibonacci (${fb.up?'ayunan naik':'ayunan turun'})</span>${fb.levels.map(x=>`<span class="chip">${(x.r*100).toFixed(1)}% ${fp(sym,x.v)}</span>`).join('')}</div>`:''}
-${sigBlk}${costWarn}
+${miniChart(sym,ok?{entry:s.entry,sl:s.sl,tp:s.tp,side:s.side,t:a.candleT}:null)}${sigBlk}${costWarn}
 ${tvBtn(sym,'60')}${aiBtn(sym)}
 </div>`;
 }
@@ -440,6 +491,7 @@ function renderQuick(){
     return '<div class="card '+(buy?'buy':'sell')+'"><div class="row"><span class="sym">'+sym+'</span><span class="badge '+(buy?'buy':'sell')+'">'+(buy?'BELI':'JUAL')+'</span></div>'
      +'<div class="'+v[1]+'" style="margin:8px 0;font-weight:700">'+v[0]+(f?' ('+f+' catatan)':'')+'</div>'
      +'<div class="grid"><div class="mut">Masuk<b>'+fp(sym,s.entry)+'</b>&nbsp;</div><div class="mut">Target<b class="pos">'+fp(sym,s.tp)+'</b>'+s.tpPips.toFixed(0)+' pip</div><div class="mut">Stop loss<b class="neg">'+fp(sym,s.sl)+'</b>'+s.slPips.toFixed(0)+' pip</div></div>'
+     +miniChart(sym,{entry:s.entry,sl:s.sl,tp:s.tp,side:s.side,t:x.a.candleT})
      +'<div class="chips">'+x.c.map(k=>'<span class="chip '+(k.ok?'up':'dn')+'">'+(k.ok?'✓ ':'✗ ')+esc(k.t)+'</span>').join('')+'</div>'
      +(f?'<div class="rej">'+x.fails.map(k=>esc(k.bad)).join('. ')+'.</div>':'')
      +cpRow({sym:sym,entry:s.entry,sl:s.sl,tp:s.tp,lot:x.a.lot.lot})
