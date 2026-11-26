@@ -96,6 +96,7 @@ footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
 <div class="warn">Forex dan emas biasanya diperdagangkan dengan leverage, sehingga rugi bisa lebih besar dari modal setoran. Sistem ini alat bantu analisa, bukan jaminan untung. Pemindaian dan alarm Telegram berjalan di server tiap 15 menit; halaman ini hanya menampilkan hasilnya.</div>
 <div id="errBar"></div>
 <div id="cfgBar"></div>
+<div id="fastbox"></div>
 <div id="quick"></div>
 <div id="cards"></div>
 </section>
@@ -314,7 +315,7 @@ function lotFor(sym,price,slPips,riskUSD,rates){
 const API_URL='https://script.google.com/macros/s/AKfycbwpcTcOroRq8A3oywj1V99YIhX0YWKR-D5LlYwW_8N462U0DEDPaz8PhASn1dKVowmLXg/exec';
 const $=s=>document.querySelector(s);
 const LSK='forexradar.cfg.v2',LSC='forexradar.code.v2',LSB='forexradar.bt.v1';
-const DEF={tf:'1h',mode:'pullback',sides:'both',pairs:'EUR/USD,GBP/USD,USD/JPY,AUD/USD,USD/CAD,USD/CHF,XAU/USD',spreads:'',slip:0.3,tpAtr:2,slAtr:1,minScore:60,minRR:1,maxBars:24,cooldown:30,balance:100,risk:1,autoPaper:false,autoTop:3,digest:'on',moveAlert:'on',moveAtr:0.8};
+const DEF={tf:'1h',mode:'pullback',sides:'both',pairs:'EUR/USD,GBP/USD,USD/JPY,AUD/USD,USD/CAD,USD/CHF,XAU/USD',spreads:'',slip:0.3,tpAtr:2,slAtr:1,minScore:60,minRR:1,maxBars:24,cooldown:30,balance:100,risk:1,autoPaper:false,autoTop:3,digest:'on',moveAlert:'on',moveAtr:0.8,fastOn:'off',fastPairs:'EUR/USD,GBP/USD',fastFrom:6,fastTo:22};
 const MODES={pullback:'Pantulan EMA21',momentum:'Momentum',donchian:'Breakout 55 candle'};
 const FIELDS=[
 ['code','Kode akses (disimpan di perangkat ini)','pw'],
@@ -335,7 +336,11 @@ const FIELDS=[
 ['autoTop','Pasangan teratas otomatis dari tab Pasar (0-3)','num'],
 ['digest','Kirim ringkasan pasar harian ke Telegram','sel',[['on','Ya'],['off','Tidak']]],
 ['moveAlert','Alert Telegram saat ada gerak besar (tab Pasar)','sel',[['on','Ya'],['off','Tidak']]],
-['moveAtr','Ambang gerak alert, kelipatan rata-rata gerak harian (0.3-3)','num']
+['moveAtr','Ambang gerak alert, kelipatan rata-rata gerak harian (0.3-3)','num'],
+['fastOn','Mode cepat (data 5 menit)','sel',[['off','Tidak'],['on','Ya']]],
+['fastPairs','Mode cepat: pasangan (maks 3, pisahkan koma)','txt'],
+['fastFrom','Mode cepat: mulai jam (WIB, 0-23)','num'],
+['fastTo','Mode cepat: selesai jam (WIB, 1-24)','num']
 ];
 function load(k,d){try{const x=JSON.parse(localStorage.getItem(k));return x?x:d}catch(e){return d}}
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
@@ -441,6 +446,29 @@ function renderQuick(){
      +'<div class="acts"><button class="btn" data-real="'+(()=>{const k='r'+(++rlN);S.rl[k]={sym:sym,side:s.side,entry:s.entry,sl:s.sl,tp:s.tp,lot:x.a.lot.lot};return k})()+'">Saya masuk (catat posisi)</button></div>'
      +tvBtn(sym,'60')+'</div>';
   }).join('');
+  const P=S.plan&&S.plan.plans?S.plan.plans:null;
+  if(P){
+    const rd=P.filter(x=>x.status==='siap'),wt=P.filter(x=>x.status!=='siap');
+    h+='<h3>Rencana harian (pasang Buy Stop atau Sell Stop)</h3><div class="note">'+(rd.length?'<b>'+rd.length+' rencana siap</b>. Pasang order pending di level Masuk, lalu biarkan harga yang menentukan.':'Belum ada rencana yang layak hari ini. Menunggu juga keputusan yang benar.')+'</div>';
+    h+=rd.map(x=>{
+      const buy=x.dir>0,bad=[];
+      if(x.riskPct>2)bad.push('Risiko lot '+x.riskPct.toFixed(0)+'% saldo (terlalu besar untuk saldo ini)');
+      if(x.rr<1.5)bad.push('R:R bersih '+x.rr.toFixed(2)+' (kurang dari 1,5)');
+      const f=bad.length,v=f===0?['SIAP PASANG '+x.type.toUpperCase(),'okb']:['HATI-HATI ('+f+' catatan)','warn'];
+      const k='r'+(++rlN);S.rl[k]={sym:x.sym,side:x.dir,entry:x.entry,sl:x.sl,tp:x.tp,lot:x.lot};
+      return '<div class="card '+(buy?'buy':'sell')+'"><div class="row"><span class="sym">'+x.sym+'</span><span class="badge '+(buy?'buy':'sell')+'">'+x.type+'</span></div>'
+       +'<div class="'+v[1]+'" style="margin:8px 0;font-weight:700">'+v[0]+'</div>'
+       +'<div class="grid"><div class="mut">Pasang di<b>'+x.fmt.entry+'</b>&nbsp;</div><div class="mut">Target<b class="pos">'+x.fmt.tp+'</b>'+x.tpPips.toFixed(0)+' pip</div><div class="mut">Stop loss<b class="neg">'+x.fmt.sl+'</b>'+x.slPips.toFixed(0)+' pip</div></div>'
+       +'<div class="chips"><span class="chip up">✓ Tidak jenuh</span><span class="chip up">✓ Tren cukup kuat (ADX '+x.adx.toFixed(0)+')</span><span class="chip up">✓ Level dekat ('+x.distPips.toFixed(0)+' pip)</span><span class="chip '+(x.rr>=1.5?'up':'dn')+'">'+(x.rr>=1.5?'✓ ':'✗ ')+'R:R '+x.rr.toFixed(1)+'</span><span class="chip '+(x.riskPct<=2?'up':'dn')+'">'+(x.riskPct<=2?'✓ ':'✗ ')+'Risiko '+x.riskPct.toFixed(1)+'%</span></div>'
+       +(f?'<div class="rej">'+bad.map(esc).join('. ')+'.</div>':'')
+       +cpRow({sym:x.sym,entry:x.entry,sl:x.sl,tp:x.tp,lot:x.lot})
+       +'<div class="acts"><button class="btn" data-real="'+k+'">Saya masuk (catat posisi)</button></div>'+tvBtn(x.sym,'240')+'</div>';
+    }).join('');
+    if(wt.length){
+      const tg=x=>/Jenuh|jenuh|Jauh dari/.test(x.reason)?'jenuh':(/ADX|lemah/.test(x.reason)?'tren lemah':(/melewati/.test(x.reason)?'level sudah terlewat':'level masih jauh'));
+      h+='<div class="note"><b>Belum layak ('+wt.length+'):</b> '+wt.map(x=>esc(x.sym)+' ('+tg(x)+')').join(', ')+'. Tunggu.</div>';
+    }
+  }else h+='<div class="note">Rencana harian sedang dimuat...</div>';
   if(none.length)h+='<div class="note"><b>Tanpa sinyal ('+none.length+'):</b> '+none.map(s=>esc(s)).join(', ')+'. Tunggu.</div>';
   el.innerHTML=h;
 }
@@ -643,7 +671,7 @@ function setAuto(on){
   clearInterval(S.timer);S.timer=null;
   if(on)S.timer=setInterval(loadData,60000);
 }
-async function sendCfg(o){const j=await api('cfg',{cfg:JSON.stringify(o)});cfg=Object.assign({},DEF,j.cfg);save(LSK,cfg)}
+async function sendCfg(o){const j=await api('cfg',{cfg:JSON.stringify(o)});cfg=Object.assign({},DEF,j.cfg);save(LSK,cfg);try{loadFast(false)}catch(e){}}
 
 // ---------- Pasar ----------
 function sgn(x,d){d=d===undefined?1:d;return(x>=0?'+':'')+x.toFixed(d)}
@@ -753,6 +781,46 @@ function planCard(x){
    +'<div class="chips"><span class="chip">Skor '+sgn(x.score,0)+'</span><span class="chip">ADX '+x.adx.toFixed(0)+'</span><span class="chip">ATR harian '+x.atrPips.toFixed(0)+' pip</span></div>'
    +enterBtn({sym:x.sym,side:x.dir,entry:x.entry,sl:x.sl,tp:x.tp,lot:x.lot})+tvBtn(x.sym,'240')+aiBtn(x.sym)+'</div>';
 }
+
+// ---------- Mode cepat (5 menit) ----------
+S.fast=null;
+function fastAge(t){if(!t)return'-';const m=Math.round((Date.now()-t)/60000);return m<1?'baru saja':m+' menit lalu'}
+function renderFast(){
+  const el=$('#fastbox');if(!el)return;
+  if(cfg.fastOn!=='on'){el.innerHTML='';return}
+  const f=S.fast;
+  let h='<h3>Mode cepat (5 menit)</h3><div class="warn">Data 5 menit dari Twelve Data, bisa selisih beberapa pip dari harga Finex. Stop loss pendek mudah tersentuh oleh spread. Sinyal 5 menit belum terbukti untung (uji data 15 menit dan 1 jam gagal). Pakai akun demo, dan cek harga Finex dulu sebelum masuk.</div>';
+  if(!f){el.innerHTML=h+'<div class="note">Memuat...</div>';return}
+  if(!f.ok){el.innerHTML=h+'<div class="note">'+esc(f.error||'Gagal')+'</div>';return}
+  h+='<div class="note">Diperbarui '+fastAge(f.at)+'. '+(f.closed?'Pasar tutup, data lama.':(f.window?'Server memperbarui tiap 5 menit.':'Di luar jam '+(f.from!==undefined?f.from:6)+'.00-'+(f.to!==undefined?f.to:22)+'.00 WIB: server tidak memperbarui otomatis, tekan tombol untuk ambil data.'))+'</div>';
+  (f.pairs||[]).forEach(sym=>{
+    const it=(f.items||{})[sym];
+    if(!it){h+='<div class="card"><div class="row"><span class="sym">'+esc(sym)+'</span></div><div class="mut">Belum ada data. Tekan Perbarui.</div></div>';return}
+    const s=it.sig,ok=s&&s.ok,buy=s&&s.side===1;
+    h+='<div class="card '+(ok?(buy?'buy':'sell'):'')+'"><div class="row"><span class="sym">'+esc(sym)+'</span><span class="mut">'+(it.price?fp(sym,it.price):'-')+' · data '+fastAge(it.at)+'</span></div>';
+    if(it.err)h+='<div class="rej">'+esc(it.err)+'</div>';
+    if(ok){
+      h+='<div class="'+(buy?'okb':'badb')+'" style="margin:8px 0;font-weight:700">SINYAL '+(buy?'BELI':'JUAL')+' (5 menit)</div>'
+       +'<div class="grid"><div class="mut">Masuk<b>'+fp(sym,s.entry)+'</b>&nbsp;</div><div class="mut">Target<b class="pos">'+fp(sym,s.tp)+'</b>'+s.tpPips.toFixed(0)+' pip</div><div class="mut">Stop loss<b class="neg">'+fp(sym,s.sl)+'</b>'+s.slPips.toFixed(0)+' pip</div></div>'
+       +ladder({sym:sym,side:s.side,entry:s.entry,sl:s.sl,tp:s.tp,cur:it.price})
+       +'<div class="chips">'+(s.why||[]).map(w=>'<span class="chip up">✓ '+esc(w)+'</span>').join('')+'</div>'
+       +enterBtn({sym:sym,side:s.side,entry:s.entry,sl:s.sl,tp:s.tp,lot:it.lot&&it.lot.lot});
+    }else h+='<div class="mut" style="margin:8px 0">Tidak ada sinyal. '+(s&&s.reject?esc(s.reject)+'.':'')+' Tunggu.</div>';
+    h+=tvBtn(sym,'5')+'</div>';
+  });
+  h+='<div class="acts"><button class="btn alt" id="fastRef">Perbarui sekarang</button></div>';
+  el.innerHTML=h;
+  const b=$('#fastRef');if(b)b.onclick=()=>loadFast(true,b);
+}
+async function loadFast(fresh,btn){
+  if(cfg.fastOn!=='on'){renderFast();return}
+  if(btn){btn.disabled=true;btn.textContent='Mengambil data...'}
+  try{S.fast=await api('fast',fresh?{fresh:'1'}:{})}catch(e){S.fast={ok:false,error:e.message}}
+  renderFast();
+}
+async function quickPlan(){
+  try{const j=await api('plan');if(j&&j.ok){S.plan=j;renderQuick()}}catch(e){}
+}
 async function loadPlan(){
   $('#plLoad').disabled=true;$('#plMsg').textContent='Menyusun rencana…';
   try{
@@ -765,7 +833,7 @@ async function loadPlan(){
     if(rdy.length)h+='<h3>Siap dipertimbangkan</h3>'+rdy.map(planCard).join('');
     else if(j.plans.length)h+='<div class="warn">Tidak ada rencana yang memenuhi syarat saat ini. Itu wajar: lebih baik menunggu daripada memaksa masuk.</div>';
     if(wt.length)h+='<h3>Belum layak, tunggu</h3>'+wt.map(planCard).join('');
-    $('#plOut').innerHTML=h;$('#plMsg').textContent='';
+    $('#plOut').innerHTML=h;$('#plMsg').textContent='';renderQuick();
   }catch(e){$('#plMsg').textContent='Gagal: '+e.message}
   $('#plLoad').disabled=false;
 }
@@ -941,7 +1009,10 @@ $('#jrCsv').onclick=csv;
 $('#jrReset').onclick=async()=>{if(confirm('Hapus semua riwayat dan posisi paper?')){try{await api('jrreset')}catch(e){S.err=e.message}await loadData()}};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&S.timer)loadData()});
 renderForm();fillBtSym();renderAll();
-loadData();
+loadData().then(()=>quickPlan());
+setInterval(()=>{if(!document.hidden)quickPlan()},300000);
+setInterval(()=>{const t=$('#tab-an');if(t&&t.classList.contains('on')&&!document.hidden&&cfg.fastOn==='on')loadFast(false)},60000);
+loadFast(false);
 </script>
 </body>
 </html>
