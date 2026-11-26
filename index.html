@@ -74,6 +74,10 @@ h3{margin:16px 0 6px;font-size:14px}
 footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
 .mch{width:100%;max-width:460px;height:auto;display:block;margin:8px 0 2px}
 .mcap{font-size:11px;color:#8a99a8;margin-bottom:6px}
+.wl{background:#101923;border:1px solid #223244;border-radius:10px;padding:10px;margin:10px 0}
+.wl summary{cursor:pointer;font-weight:700}
+.wl .chips .chip button{background:none;border:0;color:#ff8a8a;font-size:14px;padding:0 0 0 6px;cursor:pointer}
+.wl select{background:#0b121a;color:#e8eef5;border:1px solid #223244;border-radius:8px;padding:8px;margin:6px 6px 0 0}
 </style>
 </head>
 <body>
@@ -98,6 +102,7 @@ footer{padding:14px;text-align:center;color:var(--mut);font-size:11px}
 <div class="warn">Forex dan emas biasanya diperdagangkan dengan leverage, sehingga rugi bisa lebih besar dari modal setoran. Sistem ini alat bantu analisa, bukan jaminan untung. Pemindaian dan alarm Telegram berjalan di server tiap 15 menit; halaman ini hanya menampilkan hasilnya.</div>
 <div id="errBar"></div>
 <div id="cfgBar"></div>
+<div id="watch"></div>
 <div id="fastbox"></div>
 <div id="quick"></div>
 <div id="cards"></div>
@@ -525,7 +530,7 @@ function renderQuick(){
   el.innerHTML=h;
 }
 function renderCards(){renderQuick();$('#cards').innerHTML=pairs().map(card).join('')||'<div class="note">Belum ada pasangan. Isi di Setelan.</div>'}
-function renderAll(){renderBadge();renderCards();renderStat();renderJr();$('#errBar').innerHTML=S.err?'<div class="badb">'+esc(S.err)+'</div>':''}
+function renderAll(){renderBadge();renderWatch();renderCards();renderStat();renderJr();$('#errBar').innerHTML=S.err?'<div class="badb">'+esc(S.err)+'</div>':''}
 
 // ---------- Backtest ----------
 function drawLine(cv,ys){
@@ -869,6 +874,38 @@ async function loadFast(fresh,btn){
   if(btn){btn.disabled=true;btn.textContent='Mengambil data...'}
   try{S.fast=await api('fast',fresh?{fresh:'1'}:{})}catch(e){S.fast={ok:false,error:e.message}}
   renderFast();
+}
+
+// ---------- Watchlist ----------
+const UNI_W=['EUR/USD','GBP/USD','AUD/USD','NZD/USD','USD/JPY','USD/CHF','USD/CAD','EUR/GBP','EUR/JPY','EUR/CHF','EUR/AUD','EUR/CAD','EUR/NZD','GBP/JPY','GBP/CHF','GBP/AUD','GBP/CAD','GBP/NZD','AUD/JPY','AUD/CHF','AUD/CAD','AUD/NZD','NZD/JPY','NZD/CHF','NZD/CAD','CAD/JPY','CAD/CHF','CHF/JPY','XAU/USD'];
+const WL_MAX=10;
+S.wlMsg='';
+function renderWatch(){
+  const el=$('#watch');if(!el)return;
+  const cur=basePairs(),free=UNI_W.filter(x=>cur.indexOf(x)<0);
+  const open=el.querySelector('details')?el.querySelector('details').open:false;
+  el.innerHTML='<details class="wl"'+(open?' open':'')+'><summary>Watchlist ('+cur.length+'/'+WL_MAX+' pasangan)</summary>'
+   +'<div class="note">Pasangan di sini dianalisa otomatis oleh server tiap jam. Tiap pasangan memakai sekitar 24 kredit per hari (batas gratis 800, dipakai bersama tab Pasar).</div>'
+   +'<div class="chips">'+(cur.length?cur.map(x=>'<span class="chip">'+esc(x)+'<button data-wdel="'+esc(x)+'" aria-label="Hapus '+esc(x)+'">×</button></span>').join(''):'<span class="mut">Belum ada pasangan.</span>')+'</div>'
+   +(cur.length<WL_MAX&&free.length?'<div><select id="wlSel">'+free.map(x=>'<option>'+x+'</option>').join('')+'</select><button class="btn" id="wlAdd">Tambah</button></div>':(cur.length>=WL_MAX?'<div class="note">Sudah penuh ('+WL_MAX+'). Hapus satu untuk menambah.</div>':''))
+   +(S.wlMsg?'<div class="note">'+esc(S.wlMsg)+'</div>':'')
+   +'</details>';
+  const a=$('#wlAdd');if(a)a.onclick=()=>wlChange('add',$('#wlSel').value);
+  el.querySelectorAll('[data-wdel]').forEach(b=>{b.onclick=()=>wlChange('del',b.dataset.wdel)});
+}
+async function wlChange(kind,sym){
+  const cur=basePairs();let nx=cur.slice();
+  if(kind==='add'){if(nx.indexOf(sym)<0&&nx.length<WL_MAX)nx.push(sym)}
+  else nx=nx.filter(x=>x!==sym);
+  if(kind==='del'&&!nx.length){S.wlMsg='Minimal harus ada satu pasangan.';renderWatch();return}
+  try{
+    await sendCfg({pairs:nx.join(',')});
+    S.wlMsg=kind==='add'?'Ditambahkan: '+sym+'. Memuat datanya, tunggu sekitar 1 menit.':'Dihapus: '+sym+'.';
+    try{renderForm()}catch(e){}
+    renderWatch();
+    if(kind==='add'){await scanServer()}else{pairs().forEach(analyze);S.an&&delete S.an[sym];renderAll()}
+    S.wlMsg='';renderWatch();
+  }catch(e){S.wlMsg='Gagal: '+e.message;renderWatch()}
 }
 async function quickPlan(){
   try{const j=await api('plan');if(j&&j.ok){S.plan=j;renderQuick()}}catch(e){}
