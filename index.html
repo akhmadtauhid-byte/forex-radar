@@ -398,9 +398,11 @@ function analyze(sym){
 function trendChip(lb,t){return`<span class="chip ${t>0?'up':(t<0?'dn':'')}">${lb}: ${t>0?'naik':(t<0?'turun':'datar')}</span>`}
 
 // ---------- Grafik mini (candle + EMA + level) ----------
-function miniChart(sym,o){
-  const d=S.data[sym];if(!d||!d.candles||d.candles.length<30)return'';
-  const all=d.candles,N=Math.min(60,all.length),cs=all.slice(-N);
+S.zoom=S.zoom||60;
+function miniChart(sym,o,opt){
+  opt=opt||{};
+  const d=opt.cs?{candles:opt.cs,tf:opt.tfKey||'5min'}:S.data[sym];if(!d||!d.candles||d.candles.length<30)return'';
+  const all=d.candles,N=Math.min(S.zoom||60,all.length),cs=all.slice(-N);
   const cl=all.map(x=>x.c),e21=ema(cl,21).slice(-N),e50=ema(cl,50).slice(-N);
   let hi=-Infinity,lo=Infinity;
   cs.forEach(x=>{if(x.h>hi)hi=x.h;if(x.l<lo)lo=x.l});
@@ -441,9 +443,10 @@ function miniChart(sym,o){
     g+='<line x1="'+L+'" y1="'+a.y+'" x2="'+(L+pw)+'" y2="'+a.y+'" stroke="'+a.c+'" stroke-width="1" '+(a.d?'stroke-dasharray="'+a.d+'" ':'')+'opacity="0.9"/>'
       +'<text x="'+(L+pw+4)+'" y="'+(z.ty+3)+'" font-size="9.5" fill="'+a.c+'">'+a.t+'</text>';
   });
-  const tfn=({'15min':'15 menit','1h':'1 jam','4h':'4 jam'})[d.tf||cfg.tf]||(d.tf||cfg.tf);
-  return '<svg class="mch" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Grafik mini candle dengan EMA dan level">'+g+'</svg>'
-    +'<div class="mcap">Candle '+tfn+' (60 terakhir). Oranye = EMA 21, biru = EMA 50. '+(o?'Area merah = risiko, hijau = target. Segitiga = candle sinyal.':'')+'</div>';
+  const tfn=({'5min':'5 menit','15min':'15 menit','1h':'1 jam','4h':'4 jam'})[d.tf||cfg.tf]||(d.tf||cfg.tf);
+  const zb='<div class="mcap">Zoom: '+[20,40,60].map(n=>'<button class="btn alt" data-zoom="'+n+'" style="padding:4px 10px;margin-right:4px;'+((S.zoom||60)===n?'outline:2px solid #5aa9ff':'')+'">'+n+' candle</button>').join('')+'</div>';
+  return '<svg class="mch" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Grafik mini candle dengan EMA dan level">'+g+'</svg>'+zb
+    +'<div class="mcap">Candle '+tfn+' ('+N+' terakhir). Oranye = EMA 21, biru = EMA 50. '+(o?'Area merah = risiko, hijau = target. Segitiga = candle sinyal.':'')+'</div>';
 }
 function card(sym){
   const d=S.data[sym],a=S.an[sym];
@@ -854,15 +857,18 @@ function renderFast(){
     const it=(f.items||{})[sym];
     if(!it){h+='<div class="card"><div class="row"><span class="sym">'+esc(sym)+'</span></div><div class="mut">Belum ada data. Tekan Perbarui.</div></div>';return}
     const s=it.sig,ok=s&&s.ok,buy=s&&s.side===1;
+    const cs5=(it.cs||[]).map(a=>({t:a[0],o:a[1],h:a[2],l:a[3],c:a[4]}));
+    const chart=miniChart(sym,ok?{entry:s.entry,sl:s.sl,tp:s.tp,side:s.side,t:s.candleT}:null,{cs:cs5,tfKey:'5min'});
     h+='<div class="card '+(ok?(buy?'buy':'sell'):'')+'"><div class="row"><span class="sym">'+esc(sym)+'</span><span class="mut">'+(it.price?fp(sym,it.price):'-')+' · data '+fastAge(it.at)+'</span></div>';
     if(it.err)h+='<div class="rej">'+esc(it.err)+'</div>';
     if(ok){
       h+='<div class="'+(buy?'okb':'badb')+'" style="margin:8px 0;font-weight:700">SINYAL '+(buy?'BELI':'JUAL')+' (5 menit)</div>'
        +'<div class="grid"><div class="mut">Masuk<b>'+fp(sym,s.entry)+'</b>&nbsp;</div><div class="mut">Target<b class="pos">'+fp(sym,s.tp)+'</b>'+s.tpPips.toFixed(0)+' pip</div><div class="mut">Stop loss<b class="neg">'+fp(sym,s.sl)+'</b>'+s.slPips.toFixed(0)+' pip</div></div>'
-       +ladder({sym:sym,side:s.side,entry:s.entry,sl:s.sl,tp:s.tp,cur:it.price})
+       +chart
        +'<div class="chips">'+(s.why||[]).map(w=>'<span class="chip up">✓ '+esc(w)+'</span>').join('')+'</div>'
        +enterBtn({sym:sym,side:s.side,entry:s.entry,sl:s.sl,tp:s.tp,lot:it.lot&&it.lot.lot});
-    }else h+='<div class="mut" style="margin:8px 0">Tidak ada sinyal. '+(s&&s.reject?esc(s.reject)+'.':'')+' Tunggu.</div>';
+    }
+    if(!ok)h+=chart+'<div class="mut" style="margin:8px 0">Tidak ada sinyal. '+(s&&s.reject?esc(s.reject)+'.':'')+' Tunggu.</div>';
     h+=tvBtn(sym,'5')+'</div>';
   });
   h+='<div class="acts"><button class="btn alt" id="fastRef">Perbarui sekarang</button></div>';
@@ -1027,6 +1033,8 @@ async function delReal(id){
   try{await api('realdel',{id:id});loadReal(false)}catch(e){alert(e.message)}
 }
 document.addEventListener('click',ev=>{
+  const zb=ev.target.closest&&ev.target.closest('[data-zoom]');
+  if(zb){S.zoom=+zb.dataset.zoom;try{renderCards()}catch(e){}try{renderFast()}catch(e){}return}
   const t=ev.target.closest&&ev.target.closest('[data-tv],[data-real],[data-del],[data-cp],[data-ai]');if(!t)return;
   if(t.dataset.ai)aiRun(t);
   else if(t.dataset.cp)copyTxt(t);
